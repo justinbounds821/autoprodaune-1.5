@@ -1,0 +1,11 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "AutoPro Daune Production Dashboard",
+    "tags": ["autopro-daune"],
+    "timezone": "Europe/Bucharest",
+    "panels": [],
+    "time": {"from": "now-1h", "to": "now"},
+    "refresh": "10s"
+  }
+}

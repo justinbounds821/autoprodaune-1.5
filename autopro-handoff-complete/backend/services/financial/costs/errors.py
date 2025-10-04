@@ -1,0 +1,2 @@
+class CostCalcError(Exception):
+    pass

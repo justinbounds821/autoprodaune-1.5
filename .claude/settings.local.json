@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m mypy:*)",
+      "Bash(npm run build:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(ping:*)",
+      "Bash(dir \"C:\\Users\\JJ\\Desktop\\autopro_daune\\autoprodaune-1\\services\\api\\generated_videos\\advanced\")",
+      "Bash(mv:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

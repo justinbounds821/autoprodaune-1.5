@@ -1,0 +1,300 @@
+name: AutoPro Daune CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install backend dependencies
+      run: |
+        cd services/api
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov httpx
+
+    - name: Run backend tests
+      env:
+        REDIS_URL: redis://localhost:6379/0
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        SECRET_KEY: test-secret-key-for-ci
+      run: |
+        cd services/api
+        python -m pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
+
+    - name: Upload backend coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: services/api/coverage.xml
+        flags: backend
+        name: backend-coverage
+
+  test-frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 02_FRONTEND_UI_CLEAN/package-lock.json
+
+    - name: Install frontend dependencies
+      run: |
+        cd 02_FRONTEND_UI_CLEAN
+        if [ -f "package.json" ]; then
+          npm ci
+        else
+          echo "package.json not found, skipping frontend tests..."
+          exit 0
+        fi
+
+    - name: Run frontend lint
+      run: |
+        cd 02_FRONTEND_UI_CLEAN
+        if npm run lint --if-present; then
+          echo "Frontend linting passed ✅"
+        else
+          echo "Frontend linting failed or not configured ⚠️"
+        fi
+
+    - name: Run frontend tests (optional)
+      run: |
+        cd 02_FRONTEND_UI_CLEAN
+        if npm run test:check 2>/dev/null; then
+          npm run test:run
+          echo "Frontend tests passed ✅"
+        else
+          echo "Frontend tests not configured, skipping..."
+        fi
+
+    - name: Upload frontend coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: 02_FRONTEND_UI_CLEAN/coverage/lcov.info
+        flags: frontend
+        name: frontend-coverage
+
+    - name: Run frontend build
+      run: |
+        cd 02_FRONTEND_UI_CLEAN
+        if [ -f "vite.config.ts" ]; then
+          npm run build
+          echo "Frontend build successful ✅"
+        else
+          echo "Frontend build not configured, skipping..."
+        fi
+
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Run Bandit security linter
+      run: |
+        pip install bandit[toml]
+        bandit -r services/api/app/ -f json -o bandit-report.json || echo "Bandit scan completed with warnings"
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Python linting tools
+      run: |
+        pip install black isort flake8 mypy
+
+    - name: Run Black formatter check
+      run: |
+        cd services/api
+        black --check --diff app/
+
+    - name: Run isort import sorting check
+      run: |
+        cd services/api
+        isort --check-only --diff app/
+
+    - name: Run Flake8 linter
+      run: |
+        cd services/api
+        flake8 app/ --max-line-length=88 --extend-ignore=E203,W503
+
+    - name: Run MyPy type checker
+      run: |
+        cd services/api
+        mypy app/ --ignore-missing-imports
+
+    - name: Set up Node.js for frontend linting
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 02_FRONTEND_UI_CLEAN/package-lock.json
+
+    - name: Install frontend dependencies
+      run: |
+        cd 02_FRONTEND_UI_CLEAN
+        npm ci
+
+    - name: Run ESLint
+      run: |
+        cd 02_FRONTEND_UI_CLEAN
+        npm run lint
+
+    - name: Run Prettier check
+      run: |
+        cd 02_FRONTEND_UI_CLEAN
+        npm run prettier:check
+
+  build-and-push:
+    needs: [test-backend, test-frontend, security-scan, lint]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        service: [api, frontend]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ matrix.service == 'api' && 'services/api' || '02_FRONTEND_UI_CLEAN' }}
+        file: ${{ matrix.service == 'api' && 'services/api/Dockerfile' || '02_FRONTEND_UI_CLEAN/Dockerfile' }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy-staging:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+
+    steps:
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment"
+        # Add staging deployment commands here
+
+  deploy-production:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production environment"
+        # Add production deployment commands here
+
+  notify:
+    needs: [test-backend, test-frontend, security-scan, lint]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+    - name: Notify on success
+      if: needs.test-backend.result == 'success' && needs.test-frontend.result == 'success'
+      run: |
+        echo "All tests passed! ✅"
+
+    - name: Notify on failure
+      if: needs.test-backend.result == 'failure' || needs.test-frontend.result == 'failure'
+      run: |
+        echo "Tests failed! ❌"
+        exit 1

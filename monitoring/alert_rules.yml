@@ -1,0 +1,107 @@
+groups:
+  - name: autopro-daune-alerts
+    rules:
+      # API Health Alerts
+      - alert: APIDown
+        expr: up{job="autopro-daune-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "AutoPro Daune API is down"
+          description: "AutoPro Daune API has been down for more than 1 minute"
+
+      - alert: HighResponseTime
+        expr: autoprodaune_api_duration_seconds{quantile="0.95"} > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High API response time"
+          description: "95th percentile response time is {{ $value }}s"
+
+      - alert: HighErrorRate
+        expr: rate(autoprodaune_api_requests_total{status_code=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "High API error rate"
+          description: "Error rate is {{ $value | humanizePercentage }}"
+
+      # Business Logic Alerts
+      - alert: AutomationInactive
+        expr: autoprodaune_automation_active == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: automation
+        annotations:
+          summary: "Automation system inactive"
+          description: "Automation has been inactive for more than 10 minutes"
+
+      - alert: NoPostsToday
+        expr: autoprodaune_daily_posts_completed == 0 AND hour() > 12
+        for: 30m
+        labels:
+          severity: warning
+          service: automation
+        annotations:
+          summary: "No posts completed today"
+          description: "No social media posts have been completed today after noon"
+
+      - alert: LowLeadGeneration
+        expr: rate(autoprodaune_leads_total[1h]) < 0.1
+        for: 2h
+        labels:
+          severity: warning
+          service: business
+        annotations:
+          summary: "Low lead generation rate"
+          description: "Lead generation rate is below 0.1/hour for 2 hours"
+
+      # WhatsApp Bot Alerts
+      - alert: WhatsAppMessageBacklog
+        expr: rate(autoprodaune_whatsapp_messages_total{direction="received"}[5m]) > rate(autoprodaune_whatsapp_messages_total{direction="sent"}[5m]) * 2
+        for: 15m
+        labels:
+          severity: warning
+          service: whatsapp
+        annotations:
+          summary: "WhatsApp message backlog"
+          description: "Received messages significantly exceed sent messages"
+
+      # System Resource Alerts
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 90% for 10 minutes"
+
+      - alert: HighDiskUsage
+        expr: (node_filesystem_size_bytes - node_filesystem_avail_bytes) / node_filesystem_size_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High disk usage"
+          description: "Disk usage is above 85% on {{ $labels.mountpoint }}"
+
+      # Database Connection Alert
+      - alert: DatabaseConnectionIssues
+        expr: rate(autoprodaune_errors_total{service="database"}[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "Database connection issues"
+          description: "High rate of database errors detected"

@@ -1,0 +1,1 @@
+INFO:     \u2705 Prometheus metrics configured with custom registry

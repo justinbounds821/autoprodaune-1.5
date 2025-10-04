@@ -1,0 +1,6 @@
+# Core essentials only
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+prometheus-client

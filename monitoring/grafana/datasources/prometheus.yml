@@ -1,0 +1,223 @@
+# Grafana Datasource Configuration for Prometheus
+# Configurația datasource-ului Grafana pentru Prometheus
+
+apiVersion: 1
+
+datasources:
+  # Prometheus Main Datasource
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      queryTimeout: 60s
+      timeInterval: 15s
+      manageAlerts: true
+      alertmanagerUid: alertmanager
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: jaeger
+    secureJsonData:
+      basicAuthPassword: ${GRAFANA_PROMETHEUS_PASSWORD}
+    basicAuth: true
+    basicAuthUser: ${GRAFANA_PROMETHEUS_USER}
+
+  # PostgreSQL Datasource
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: autopro_daune_prod
+    user: ${POSTGRES_USER}
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 100
+      maxIdleConns: 100
+      maxIdleConnsAuto: true
+      connMaxLifetime: 14400
+      postgresVersion: 15
+      timescaledb: false
+
+  # InfluxDB Datasource (for time series data)
+  - name: InfluxDB
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    database: autopro_metrics
+    user: ${INFLUXDB_USER}
+    secureJsonData:
+      password: ${INFLUXDB_PASSWORD}
+    jsonData:
+      httpMode: POST
+      timeInterval: 15s
+      version: InfluxQL
+
+  # Elasticsearch Datasource (for logs)
+  - name: Elasticsearch
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    database: autopro-logs-*
+    jsonData:
+      interval: Daily
+      timeField: "@timestamp"
+      esVersion: "8.0.0"
+      maxConcurrentShardRequests: 5
+      logMessageField: "message"
+      logLevelField: "level"
+
+  # Jaeger Tracing Datasource
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    jsonData:
+      tracesToLogs:
+        datasourceUid: elasticsearch
+        tags: ['job', 'instance', 'pod', 'namespace']
+        mappedTags: [{ key: 'service.name', value: 'service' }]
+        mapTagNamesEnabled: false
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: false
+        filterBySpanID: false
+      tracesToMetrics:
+        datasourceUid: prometheus
+        tags: [{ key: 'service.name', value: 'service' }]
+        queries:
+          - name: 'Sample query'
+            query: 'sum(rate(traces_spanmetrics_latency_bucket{$$__tags}[5m]))'
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+
+  # Loki Datasource (for logs)
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: jaeger
+          matcherRegex: "traceID=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+
+  # TestData Datasource (for testing)
+  - name: TestData
+    type: testdata
+    access: proxy
+    isDefault: false
+    editable: true
+
+  # CloudWatch Datasource (AWS)
+  - name: CloudWatch
+    type: cloudwatch
+    access: proxy
+    url: https://monitoring.eu-central-1.amazonaws.com
+    jsonData:
+      defaultRegion: eu-central-1
+      authType: keys
+    secureJsonData:
+      accessKey: ${AWS_ACCESS_KEY_ID}
+      secretKey: ${AWS_SECRET_ACCESS_KEY}
+
+  # MySQL Datasource (for business data)
+  - name: MySQL
+    type: mysql
+    access: proxy
+    url: mysql:3306
+    database: autopro_business
+    user: ${MYSQL_USER}
+    secureJsonData:
+      password: ${MYSQL_PASSWORD}
+    jsonData:
+      maxOpenConns: 100
+      maxIdleConns: 100
+      connMaxLifetime: 14400
+      timezone: Europe/Bucharest
+
+  # Redis Datasource
+  - name: Redis
+    type: redis-datasource
+    access: proxy
+    url: redis:6379
+    jsonData:
+      client: standalone
+      poolSize: 5
+      timeout: 5s
+      pingInterval: 0
+      pipelineWindow: 0
+    secureJsonData:
+      password: ${REDIS_PASSWORD}
+
+  # Alertmanager Datasource
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: true
+
+  # Custom Business Metrics Datasource
+  - name: BusinessMetrics
+    type: prometheus
+    access: proxy
+    url: http://api:8000/business/metrics
+    jsonData:
+      httpMethod: GET
+      queryTimeout: 60s
+      timeInterval: 60s
+      manageAlerts: false
+
+  # Custom Financial Metrics Datasource
+  - name: FinancialMetrics
+    type: prometheus
+    access: proxy
+    url: http://api:8000/financial/metrics
+    jsonData:
+      httpMethod: GET
+      queryTimeout: 60s
+      timeInterval: 300s
+      manageAlerts: false
+
+  # Custom Social Media Metrics Datasource
+  - name: SocialMediaMetrics
+    type: prometheus
+    access: proxy
+    url: http://api:8000/social/metrics
+    jsonData:
+      httpMethod: GET
+      queryTimeout: 60s
+      timeInterval: 300s
+      manageAlerts: false
+
+  # Custom Video Generation Metrics Datasource
+  - name: VideoGenerationMetrics
+    type: prometheus
+    access: proxy
+    url: http://api:8000/video/metrics
+    jsonData:
+      httpMethod: GET
+      queryTimeout: 60s
+      timeInterval: 300s
+      manageAlerts: false
+
+  # Custom Analytics Metrics Datasource
+  - name: AnalyticsMetrics
+    type: prometheus
+    access: proxy
+    url: http://api:8000/analytics/metrics
+    jsonData:
+      httpMethod: GET
+      queryTimeout: 60s
+      timeInterval: 300s
+      manageAlerts: false

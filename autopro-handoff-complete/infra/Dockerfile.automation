@@ -1,0 +1,96 @@
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    cron \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create automation script
+RUN cat > /app/automation_scheduler.py << 'EOF'
+"""
+AutoPro Daune Automation Scheduler
+
+Runs the 3x daily automation cycle:
+- 09:00 - Educational content
+- 15:00 - Testimonial content
+- 21:00 - Promotional content
+"""
+import asyncio
+import os
+import logging
+from datetime import datetime, time
+import schedule
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Import the automation service
+from app.services.social_poster import get_social_poster
+
+async def run_daily_automation():
+    """Run the daily automation cycle"""
+    try:
+        logger.info("🚀 Starting daily automation cycle")
+
+        social_poster = get_social_poster()
+        result = await social_poster.trigger_daily_automation()
+
+        if result.get('success'):
+            logger.info(f"✅ Daily automation completed: {result.get('message')}")
+        else:
+            logger.error(f"❌ Daily automation failed: {result.get('error')}")
+
+    except Exception as e:
+        logger.error(f"❌ Automation error: {e}")
+
+def schedule_automation():
+    """Schedule the automation to run at specified times"""
+    # Get posting times from environment
+    posting_times = os.getenv('POSTING_SCHEDULE', '09:00,15:00,21:00').split(',')
+
+    for posting_time in posting_times:
+        schedule.every().day.at(posting_time.strip()).do(
+            lambda: asyncio.run(run_daily_automation())
+        )
+        logger.info(f"📅 Scheduled daily automation at {posting_time.strip()}")
+
+def main():
+    """Main automation loop"""
+    logger.info("🎯 AutoPro Daune Automation Scheduler starting...")
+
+    # Schedule the automation
+    schedule_automation()
+
+    # Run continuously
+    while True:
+        schedule.run_pending()
+        time.sleep(60)  # Check every minute
+
+if __name__ == "__main__":
+    main()
+EOF
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Create directories
+RUN mkdir -p /app/content_storage /app/logs
+
+# Run the automation scheduler
+CMD ["python", "/app/automation_scheduler.py"]

@@ -1,0 +1,66 @@
+{
+  "branch": "feat/integration-green",
+  "commit_policy": {
+    "max_loc": 200,
+    "conventional": true,
+    "format": "feat|fix|refactor|docs(scope): message"
+  },
+  "io_rules": {
+    "may_create": [
+      "webapp/src/adapters/**",
+      "webapp/src/ports/**",
+      "02_FRONTEND_UI_CLEAN/src/adapters/**",
+      "02_FRONTEND_UI_CLEAN/src/ports/**",
+      ".vibe/**",
+      "scripts/**",
+      "autopro-handoff/**"
+    ],
+    "may_edit": [
+      "**/*.py",
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.md",
+      ".env.example",
+      "services/api/app/**/*.py",
+      "02_FRONTEND_UI_CLEAN/src/**/*.ts",
+      "02_FRONTEND_UI_CLEAN/src/**/*.tsx"
+    ],
+    "ask_before_delete": true,
+    "forbidden": [
+      "node_modules/**",
+      ".venv/**",
+      "__pycache__/**",
+      "*.pyc"
+    ]
+  },
+  "run_commands": {
+    "backend_dev": "cd services/api && python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload",
+    "frontend_dev": "cd 02_FRONTEND_UI_CLEAN && npm run dev",
+    "smoke_test": "pwsh -File scripts/smoke-test.ps1",
+    "smoke_test_bash": "bash scripts/smoke-test.sh"
+  },
+  "definition_of_done": [
+    "FE↔BE e2e OK: toate cele 5 features TOP funcționale",
+    "HeyGen UX corect: banner când key lipsește, fără 500 error",
+    "Redis fallback: in-memory fără warning spam",
+    "Supabase: automation_config tabel creat sau adaptor fallback",
+    "CORS: :3006 și :3007 în BACKEND_CORS_ORIGINS",
+    "Docs .vibe actualizate: INTEGRATION_SPEC, TROUBLESHOOTING, LEDGER",
+    "STATUS=green: smoke test trece, zero erori critice în logs"
+  ],
+  "style_rules": {
+    "max_file_lines": 500,
+    "max_class_lines": 200,
+    "max_function_lines": 40,
+    "naming": "snake_case (Python), camelCase (TS/JS)",
+    "principles": [
+      "single_responsibility",
+      "modular_design",
+      "avoid_god_classes",
+      "no_data_info_temp_naming",
+      "dependency_injection"
+    ]
+  },
+  "non_destructive": true,
+  "notes": "Toate schimbările trebuie să fie non-destructive. Commits ≤200 LOC. Prioritate pe legarea FE↔BE, nu pe refactorizări masive."
+}

@@ -1,0 +1,67 @@
+{
+  "request": {
+    "text": "AutoPro Daune test video",
+    "duration": 15,
+    "resolution": "1080p",
+    "aspect_ratio": "portrait",
+    "avatar_id": "professional",
+    "background_id": "office",
+    "voice_language": "romanian",
+    "voice_gender": "female",
+    "enable_subtitles": true,
+    "enable_lip_sync": true,
+    "custom_background_color": "#1a73e8",
+    "text_position": "left"
+  },
+  "avatar_config": {
+    "name": "Alexandra - Business Professional",
+    "image_url": "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=600&h=800&fit=crop&crop=face",
+    "voice_id": "ro-RO-AlinaNeural",
+    "personality": "Professional, authoritative, trustworthy",
+    "position": {
+      "x": 0.75,
+      "y": 0.2
+    },
+    "size": [
+      320,
+      480
+    ],
+    "speaking_style": "Clear, confident, business-focused"
+  },
+  "background_config": {
+    "name": "Modern Office Environment",
+    "image_url": "https://images.unsplash.com/photo-1497366216548-37526070297c?w=1920&h=1080&fit=crop",
+    "mood": "professional, corporate, trustworthy",
+    "overlay": {
+      "color": [
+        0,
+        0,
+        0,
+        100
+      ],
+      "type": "gradient"
+    },
+    "text_areas": [
+      {
+        "x": 0.05,
+        "y": 0.3,
+        "width": 0.4,
+        "height": 0.4
+      }
+    ]
+  },
+  "dimensions": {
+    "width": 607,
+    "height": 1080
+  },
+  "generated_at": "2025-09-29T21:20:52.583800",
+  "preview_path": "C:\\Users\\JJ\\Desktop\\autopro_daune\\autoprodaune-1\\services\\api\\generated_videos\\advanced\\autopro_advanced_20250929_212050.png",
+  "ready_for_video_generation": true,
+  "estimated_features": {
+    "voice_synthesis": "Romanian TTS with ro-RO-AlinaNeural",
+    "lip_synchronization": "Advanced AI lip sync technology",
+    "background_rendering": "Professional Modern Office Environment",
+    "text_animation": "Smooth text reveals and highlights",
+    "brand_integration": "AutoPro Daune branding and colors"
+  }
+}

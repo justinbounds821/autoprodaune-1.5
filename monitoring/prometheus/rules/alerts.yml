@@ -1,0 +1,368 @@
+# Alert Rules for AutoPro Daune
+# Regulile de alertare pentru monitorizarea sistemului
+
+groups:
+  # System Alerts
+  - name: system_alerts
+    rules:
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for more than 5 minutes on {{ $labels.instance }}"
+
+      # High Disk Usage
+      - alert: HighDiskUsage
+        expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "High disk usage detected"
+          description: "Disk usage is above 90% for more than 5 minutes on {{ $labels.instance }}"
+
+      # System Load High
+      - alert: HighSystemLoad
+        expr: node_load1 > 4
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High system load detected"
+          description: "System load is above 4 for more than 5 minutes on {{ $labels.instance }}"
+
+  # Application Alerts
+  - name: application_alerts
+    rules:
+      # API Service Down
+      - alert: APIServiceDown
+        expr: up{job="autopro-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "API service is down"
+          description: "API service has been down for more than 1 minute"
+
+      # Dashboard Service Down
+      - alert: DashboardServiceDown
+        expr: up{job="autopro-dashboard"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: dashboard
+        annotations:
+          summary: "Dashboard service is down"
+          description: "Dashboard service has been down for more than 1 minute"
+
+      # High API Response Time
+      - alert: HighAPIResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="autopro-api"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High API response time"
+          description: "95th percentile API response time is above 2 seconds for more than 5 minutes"
+
+      # High API Error Rate
+      - alert: HighAPIErrorRate
+        expr: rate(http_requests_total{job="autopro-api",status=~"5.."}[5m]) / rate(http_requests_total{job="autopro-api"}[5m]) * 100 > 5
+        for: 5m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "High API error rate"
+          description: "API error rate is above 5% for more than 5 minutes"
+
+      # API Requests Rate High
+      - alert: HighAPIRequestRate
+        expr: rate(http_requests_total{job="autopro-api"}[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High API request rate"
+          description: "API request rate is above 100 req/s for more than 5 minutes"
+
+  # Database Alerts
+  - name: database_alerts
+    rules:
+      # PostgreSQL Connection Issues
+      - alert: PostgreSQLConnectionIssues
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgres
+        annotations:
+          summary: "PostgreSQL connection issues"
+          description: "PostgreSQL database is not responding"
+
+      # PostgreSQL High Connections
+      - alert: PostgreSQLHighConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "High PostgreSQL connections"
+          description: "PostgreSQL connections are above 80% of max connections"
+
+      # PostgreSQL Slow Queries
+      - alert: PostgreSQLSlowQueries
+        expr: rate(pg_stat_database_tup_returned[5m]) / rate(pg_stat_database_tup_fetched[5m]) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "PostgreSQL slow queries detected"
+          description: "PostgreSQL query performance is degraded"
+
+      # Redis Connection Issues
+      - alert: RedisConnectionIssues
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis connection issues"
+          description: "Redis cache is not responding"
+
+      # Redis High Memory Usage
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis memory usage is above 85%"
+
+  # Business Alerts
+  - name: business_alerts
+    rules:
+      # Low Revenue Alert
+      - alert: LowRevenue
+        expr: autopro_revenue_daily < 1000
+        for: 1h
+        labels:
+          severity: warning
+          service: business
+        annotations:
+          summary: "Low daily revenue"
+          description: "Daily revenue is below 1000 RON for more than 1 hour"
+
+      # High API Costs
+      - alert: HighAPICosts
+        expr: autopro_api_costs_daily > 500
+        for: 1h
+        labels:
+          severity: warning
+          service: business
+        annotations:
+          summary: "High daily API costs"
+          description: "Daily API costs are above 500 RON for more than 1 hour"
+
+      # Low ROI Alert
+      - alert: LowROI
+        expr: autopro_roi_percentage < 50
+        for: 2h
+        labels:
+          severity: critical
+          service: business
+        annotations:
+          summary: "Low ROI detected"
+          description: "ROI is below 50% for more than 2 hours"
+
+      # Credit Balance Low
+      - alert: LowCreditBalance
+        expr: autopro_credit_balance < 100
+        for: 30m
+        labels:
+          severity: critical
+          service: business
+        annotations:
+          summary: "Low credit balance"
+          description: "Credit balance is below 100 credits for more than 30 minutes"
+
+      # No New Leads
+      - alert: NoNewLeads
+        expr: increase(autopro_leads_total[1h]) == 0
+        for: 2h
+        labels:
+          severity: warning
+          service: business
+        annotations:
+          summary: "No new leads"
+          description: "No new leads generated in the last 2 hours"
+
+  # Social Media Alerts
+  - name: social_media_alerts
+    rules:
+      # Social Media Posting Failed
+      - alert: SocialMediaPostingFailed
+        expr: increase(autopro_social_posts_failed_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: social_media
+        annotations:
+          summary: "Social media posting failures"
+          description: "More than 5 social media posts failed in the last 5 minutes"
+
+      # Social Media API Rate Limit
+      - alert: SocialMediaRateLimit
+        expr: autopro_social_api_rate_limit_remaining < 10
+        for: 5m
+        labels:
+          severity: warning
+          service: social_media
+        annotations:
+          summary: "Social media API rate limit approaching"
+          description: "Social media API rate limit remaining is below 10"
+
+  # Video Generation Alerts
+  - name: video_generation_alerts
+    rules:
+      # Video Generation Queue Backlog
+      - alert: VideoGenerationQueueBacklog
+        expr: autopro_video_queue_size > 50
+        for: 10m
+        labels:
+          severity: warning
+          service: video_generation
+        annotations:
+          summary: "Video generation queue backlog"
+          description: "Video generation queue has more than 50 pending jobs for more than 10 minutes"
+
+      # Video Generation Failed
+      - alert: VideoGenerationFailed
+        expr: increase(autopro_video_generation_failed_total[5m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+          service: video_generation
+        annotations:
+          summary: "Video generation failures"
+          description: "More than 3 video generations failed in the last 5 minutes"
+
+      # Pika API Issues
+      - alert: PikaAPIIssues
+        expr: autopro_pika_api_errors_total > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: video_generation
+        annotations:
+          summary: "Pika API issues"
+          description: "Pika API is experiencing errors"
+
+  # External Service Alerts
+  - name: external_service_alerts
+    rules:
+      # External API Down
+      - alert: ExternalAPIDown
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: external
+        annotations:
+          summary: "External API is down"
+          description: "External API {{ $labels.instance }} is not responding"
+
+      # High External API Response Time
+      - alert: HighExternalAPIResponseTime
+        expr: probe_duration_seconds{job="blackbox-http"} > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: external
+        annotations:
+          summary: "High external API response time"
+          description: "External API {{ $labels.instance }} response time is above 10 seconds"
+
+      # Telegram Bot Issues
+      - alert: TelegramBotIssues
+        expr: up{job="telegram-bot"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: telegram
+        annotations:
+          summary: "Telegram bot issues"
+          description: "Telegram bot is not responding"
+
+      # N8N Workflow Issues
+      - alert: N8NWorkflowIssues
+        expr: up{job="n8n"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: n8n
+        annotations:
+          summary: "N8N workflow issues"
+          description: "N8N workflow automation is not responding"
+
+  # Security Alerts
+  - name: security_alerts
+    rules:
+      # High Failed Login Attempts
+      - alert: HighFailedLoginAttempts
+        expr: increase(autopro_auth_failed_logins_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: critical
+          service: security
+        annotations:
+          summary: "High failed login attempts"
+          description: "More than 10 failed login attempts in the last 5 minutes"
+
+      # Suspicious API Usage
+      - alert: SuspiciousAPIUsage
+        expr: rate(autopro_api_requests_total{status="429"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "Suspicious API usage detected"
+          description: "High rate of rate-limited requests detected"
+
+      # Unauthorized Access Attempts
+      - alert: UnauthorizedAccessAttempts
+        expr: increase(autopro_auth_unauthorized_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: critical
+          service: security
+        annotations:
+          summary: "Unauthorized access attempts"
+          description: "More than 5 unauthorized access attempts in the last 5 minutes"
