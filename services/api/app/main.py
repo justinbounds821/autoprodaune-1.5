@@ -500,7 +500,10 @@ async def startup_event():
             # For now, we'll just initialize it
             log.info("✅ Housekeeping service initialized")
         except Exception as e:
-            log.warning(f"⚠️ Housekeeping service initialization failed: {e}")
+            log.error(f"❌ Housekeeping service initialization failed: {e}", exc_info=True)
+            # Store error for health check reporting
+            import sys
+            sys.modules[__name__].__dict__['_housekeeping_error'] = str(e)
 
         # Log all registered routes
         lines = []

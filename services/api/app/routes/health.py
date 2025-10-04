@@ -59,6 +59,9 @@ async def detailed_health_check():
     # Check external services
     health_data["dependencies"]["external_services"] = _check_external_services_health()
 
+    # Check housekeeping service
+    health_data["dependencies"]["housekeeping"] = _check_housekeeping_health()
+
     # Determine overall health status
     overall_status = "healthy"
     for dep_name, dep_status in health_data["dependencies"].items():
@@ -236,6 +239,46 @@ def _check_video_backends_health() -> Dict[str, Any]:
         "status": overall_status,
         "backends": backends
     }
+
+def _check_housekeeping_health() -> Dict[str, Any]:
+    """Check housekeeping service status."""
+    try:
+        # Check if housekeeping error is stored in module
+        import sys
+        current_module = sys.modules[__name__]
+        housekeeping_error = getattr(current_module, '_housekeeping_error', None)
+
+        if housekeeping_error:
+            return {
+                "status": "error",
+                "message": f"Housekeeping initialization failed: {housekeeping_error}"
+            }
+
+        # Try to get housekeeping service
+        try:
+            from ...services.housekeeping import get_housekeeping_service
+            housekeeping = get_housekeeping_service()
+
+            return {
+                "status": "ok",
+                "message": "Housekeeping service operational",
+                "ttl_completed_days": housekeeping.ttl_completed_days,
+                "ttl_failed_days": housekeeping.ttl_failed_days,
+                "cleanup_interval_minutes": housekeeping.cleanup_interval_minutes
+            }
+
+        except ImportError:
+            return {
+                "status": "warning",
+                "message": "Housekeeping service not available"
+            }
+
+    except Exception as e:
+        logger.error(f"Housekeeping health check failed: {e}")
+        return {
+            "status": "error",
+            "message": f"Housekeeping health check error: {str(e)}"
+        }
 
 def _check_external_services_health() -> Dict[str, Any]:
     """Check external service dependencies."""
