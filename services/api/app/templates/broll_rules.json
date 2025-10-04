@@ -1,0 +1,52 @@
+{
+  "rules": [
+    {
+      "when_tag": "asigurari",
+      "asset_path": "assets/broll/office.mp4",
+      "start_offset": 0.0,
+      "duration": 3.5,
+      "opacity": 1.0,
+      "track": 2
+    },
+    {
+      "when_tag": "daune",
+      "asset_path": "assets/broll/garage.mp4",
+      "start_offset": 0.2,
+      "duration": 4.0,
+      "opacity": 1.0,
+      "track": 2
+    },
+    {
+      "when_tag": "auto",
+      "asset_path": "assets/broll/car_driving.mp4",
+      "start_offset": 0.0,
+      "duration": 3.0,
+      "opacity": 0.8,
+      "track": 2
+    },
+    {
+      "when_tag": "despagubire",
+      "asset_path": "assets/broll/handshake.mp4",
+      "start_offset": 0.5,
+      "duration": 3.5,
+      "opacity": 1.0,
+      "track": 2
+    },
+    {
+      "when_tag": "rca",
+      "asset_path": "assets/broll/insurance_document.mp4",
+      "start_offset": 0.0,
+      "duration": 3.0,
+      "opacity": 0.9,
+      "track": 2
+    },
+    {
+      "when_tag": "casco",
+      "asset_path": "assets/broll/car_protection.mp4",
+      "start_offset": 0.3,
+      "duration": 4.0,
+      "opacity": 1.0,
+      "track": 2
+    }
+  ]
+}

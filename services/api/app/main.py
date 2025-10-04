@@ -373,6 +373,14 @@ try:
 except ImportError as e:
     log.warning("⚠️ Advanced Video router dezactivat: %s", e)
 
+try:
+    # Include Video AI Features (Phase 9: Whisper + B-roll + Insights)
+    from .routes.video_ai import router as video_ai_router
+    app.include_router(video_ai_router)
+    log.info("✅ Video AI router loaded (Phase 9 features)")
+except ImportError as e:
+    log.warning("⚠️ Video AI router dezactivat: %s", e)
+
 # 🚀 GROWTH ENGINE - Mass Content Production & Viral Distribution System
 try:
     from .routes.growth_engine import router as growth_engine_router
