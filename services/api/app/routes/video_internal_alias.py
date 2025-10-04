@@ -177,12 +177,24 @@ async def get_job_status(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # Enhance response with CDN and metadata information
+    response_meta = job.get("meta", {})
+
+    # Add CDN URL if available
+    if job.get("video_url"):
+        response_meta["cdn_url"] = job["video_url"]
+
+    # Add thumbnail URL if available
+    thumb_url = job.get("thumb_url")
+    if thumb_url:
+        response_meta["thumbnail_url"] = thumb_url
+
     return JobStatusResponse(
         job_id=job_id,
         status=job["status"],
         video_url=job.get("video_url"),
         error=job.get("error"),
-        meta=job.get("meta", {}),
+        meta=response_meta,
         created_at=job.get("created_at"),
         completed_at=job.get("completed_at")
     )

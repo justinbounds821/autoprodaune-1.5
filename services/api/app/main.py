@@ -280,6 +280,7 @@ try:
     from .routes.video_advanced_alias import router as video_advanced_alias_router
     from .routes.video_internal_alias import router as video_internal_alias_router
     from .routes.video_templates import router as video_templates_router
+    from .routes.video_cdn import router as video_cdn_router
     from .routes.health import router as detailed_health_router
 
     app.include_router(leads_router)
@@ -296,6 +297,7 @@ try:
     app.include_router(video_advanced_alias_router)
     app.include_router(video_internal_alias_router)
     app.include_router(video_templates_router)
+    app.include_router(video_cdn_router)
     log.info("✅ All main routers loaded successfully")
 
     # Initialize Prometheus metrics if enabled
@@ -489,6 +491,16 @@ async def startup_event():
             log.info("✅ Automation scheduler started")
         else:
             log.info("⚠️ Automation scheduler disabled by configuration")
+
+        # Start housekeeping service for cleanup
+        try:
+            from .services.housekeeping import get_housekeeping_service
+            housekeeping = get_housekeeping_service()
+            # Note: In production, you might want to start this as a background task
+            # For now, we'll just initialize it
+            log.info("✅ Housekeeping service initialized")
+        except Exception as e:
+            log.warning(f"⚠️ Housekeeping service initialization failed: {e}")
 
         # Log all registered routes
         lines = []

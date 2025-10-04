@@ -27,6 +27,10 @@ class StorageService:
         self.r2_access_key = os.getenv("R2_ACCESS_KEY_ID")
         self.r2_secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
         self.r2_bucket = os.getenv("R2_BUCKET_NAME", "autopro-videos")
+        self.r2_public_base = os.getenv("R2_PUBLIC_BASE")
+        self.sign_urls = os.getenv("R2_SIGN_URLS", "true").lower() in ("1", "true", "yes")
+        self.sign_ttl = int(os.getenv("R2_SIGN_TTL_SECONDS", "86400"))  # 24 hours
+        self.cache_control = os.getenv("CDN_CACHE_CONTROL", "public, max-age=31536000, immutable")
 
         # Ensure local videos directory exists
         if self.storage_type == "local":
@@ -119,13 +123,17 @@ class StorageService:
             now = datetime.utcnow()
             key = f"videos/{now.year}/{now.month"02d"}/{filename}"
 
-            # Upload to R2
+            # Upload to R2 with cache headers
             self.r2_client.put_object(
                 Bucket=self.r2_bucket,
                 Key=key,
                 Body=video_data,
                 ContentType='video/mp4',
-                ACL='private'  # Private by default
+                CacheControl=self.cache_control,
+                Metadata={
+                    'uploaded-at': datetime.utcnow().isoformat(),
+                    'content-type': 'video/mp4'
+                }
             )
 
             # Generate presigned URL (24 hours)
@@ -183,15 +191,29 @@ class StorageService:
                     # Check if object exists
                     self.r2_client.head_object(Bucket=self.r2_bucket, Key=key)
 
-                    # Generate presigned URL
-                    presigned_url = self.r2_client.generate_presigned_url(
-                        'get_object',
-                        Params={'Bucket': self.r2_bucket, 'Key': key},
-                        ExpiresIn=24 * 3600
-                    )
-
-                    logger.info(f"✅ Found video in R2: {key}")
-                    return presigned_url
+                    if self.sign_urls:
+                        # Generate presigned URL with configurable TTL
+                        presigned_url = self.r2_client.generate_presigned_url(
+                            'get_object',
+                            Params={'Bucket': self.r2_bucket, 'Key': key},
+                            ExpiresIn=self.sign_ttl
+                        )
+                        logger.info(f"✅ Generated signed URL for video: {key}")
+                        return presigned_url
+                    else:
+                        # Use public URL if available
+                        if self.r2_public_base:
+                            public_url = f"{self.r2_public_base}/{key}"
+                            logger.info(f"✅ Using public URL for video: {key}")
+                            return public_url
+                        else:
+                            # Fallback to presigned URL
+                            presigned_url = self.r2_client.generate_presigned_url(
+                                'get_object',
+                                Params={'Bucket': self.r2_bucket, 'Key': key},
+                                ExpiresIn=self.sign_ttl
+                            )
+                            return presigned_url
 
                 except self.r2_client.exceptions.NoSuchKey:
                     continue
@@ -265,13 +287,109 @@ class StorageService:
             logger.error(f"Error deleting R2 video for job {job_id}: {e}")
             return False
 
+    def purge_cdn_object(self, key: str) -> bool:
+        """
+        Purge object from R2/CDN cache.
+
+        Args:
+            key: Object key to purge
+
+        Returns:
+            True if purged successfully, False otherwise
+        """
+        if not self.r2_client:
+            logger.debug("R2 client not available for purge")
+            return False
+
+        try:
+            # Delete the object (soft delete - just removes from CDN cache)
+            self.r2_client.delete_object(Bucket=self.r2_bucket, Key=key)
+            logger.info(f"✅ Purged CDN object: {key}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to purge CDN object {key}: {e}")
+            return False
+
+    def check_object_exists(self, key: str) -> bool:
+        """
+        Check if object exists in R2.
+
+        Args:
+            key: Object key to check
+
+        Returns:
+            True if exists, False otherwise
+        """
+        if not self.r2_client:
+            return False
+
+        try:
+            self.r2_client.head_object(Bucket=self.r2_bucket, Key=key)
+            return True
+        except self.r2_client.exceptions.NoSuchKey:
+            return False
+        except Exception as e:
+            logger.error(f"Error checking object {key}: {e}")
+            return False
+
+    def save_file_with_metadata(self, file_path: str, key: str, metadata: Dict[str, Any] = None) -> bool:
+        """
+        Save file to R2 with additional metadata.
+
+        Args:
+            file_path: Local file path
+            key: R2 object key
+            metadata: Additional metadata to store
+
+        Returns:
+            True if saved successfully, False otherwise
+        """
+        if not self.r2_client:
+            logger.debug("R2 client not available for save")
+            return False
+
+        try:
+            with open(file_path, 'rb') as f:
+                file_data = f.read()
+
+            # Prepare metadata
+            r2_metadata = {
+                'uploaded-at': datetime.utcnow().isoformat(),
+                'file-size': str(len(file_data))
+            }
+
+            if metadata:
+                for k, v in metadata.items():
+                    r2_metadata[k] = str(v)
+
+            # Upload with metadata
+            self.r2_client.put_object(
+                Bucket=self.r2_bucket,
+                Key=key,
+                Body=file_data,
+                CacheControl=self.cache_control,
+                Metadata=r2_metadata
+            )
+
+            logger.info(f"✅ Saved file to R2 with metadata: {key}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to save file {file_path} to R2: {e}")
+            return False
+
     def get_storage_info(self) -> Dict[str, Any]:
         """Get storage configuration information."""
         return {
             "storage_type": self.storage_type,
             "local_path": self.videos_dir if self.storage_type == "local" else None,
             "r2_bucket": self.r2_bucket if self.storage_type == "r2" else None,
-            "r2_endpoint": self.r2_endpoint if self.storage_type == "r2" else None
+            "r2_endpoint": self.r2_endpoint if self.storage_type == "r2" else None,
+            "r2_public_base": self.r2_public_base if self.storage_type == "r2" else None,
+            "sign_urls": self.sign_urls,
+            "sign_ttl_seconds": self.sign_ttl,
+            "cache_control": self.cache_control
         }
 
 # Global instance

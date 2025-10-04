@@ -279,11 +279,24 @@ class VideoEngine:
             self._log_job_event(job_id, "cost_calculation", f"Calculating costs for {processing_duration:.2f}s processing")
             await self._calculate_and_save_costs(job_id, request, audio_duration, processing_duration)
 
-            # Step 7: Update job as completed
-            await self._update_job_status(job_id, "completed", video_url=video_url)
+            # Step 7: Generate thumbnail and metadata
+            self._log_job_event(job_id, "thumbnail_start", "Generating video thumbnail and metadata")
+            thumbnail_url = await self._generate_thumbnail(job_id, final_video_path)
+            metadata = await self._extract_metadata(job_id, final_video_path)
+            self._log_job_event(job_id, "thumbnail_complete", "Thumbnail and metadata generated")
+
+            # Step 8: Update job as completed with enhanced metadata
+            completion_meta = {
+                "video_url": video_url,
+                "thumbnail_url": thumbnail_url,
+                "metadata": metadata,
+                "processing_duration": processing_duration,
+                "file_size_bytes": video_size_bytes
+            }
+            await self._update_job_status(job_id, "completed", **completion_meta)
             self._log_job_event(job_id, "job_complete", f"Job completed successfully in {processing_duration:.2f}s")
 
-            # Step 8: Send webhook notification
+            # Step 9: Send webhook notification
             await self._send_webhook_notification(job_id, "completed", video_url)
 
             # Record final metrics
@@ -452,6 +465,73 @@ class VideoEngine:
         """Send webhook notification."""
         if self.webhook_notifier:
             await self.webhook_notifier.send_webhook(job_id, status, video_url, error)
+
+    async def _generate_thumbnail(self, job_id: str, video_path: str) -> Optional[str]:
+        """Generate thumbnail for the video."""
+        try:
+            if not self.thumbnailer:
+                return None
+
+            # Generate thumbnail locally
+            thumb_path = self.thumbnailer.generate_thumbnail(video_path)
+
+            if not thumb_path:
+                return None
+
+            # Upload to storage if R2 is configured
+            if self.storage_service and self.storage_service.storage_type == "r2":
+                thumb_key = f"thumbnails/video_{job_id}.jpg"
+                thumb_url = self.storage_service.save_file_with_metadata(
+                    thumb_path,
+                    thumb_key,
+                    {"type": "thumbnail", "job_id": job_id}
+                )
+
+                # Clean up local thumbnail file
+                try:
+                    os.remove(thumb_path)
+                except:
+                    pass
+
+                return thumb_url
+
+            # For local storage, return relative path
+            return f"/api/video/thumbnails/video_{job_id}.jpg"
+
+        except Exception as e:
+            logger.error(f"Failed to generate thumbnail for job {job_id}: {e}")
+            return None
+
+    async def _extract_metadata(self, job_id: str, video_path: str) -> Dict[str, Any]:
+        """Extract video metadata."""
+        try:
+            if not self.metadata_probe:
+                return {}
+
+            metadata = self.metadata_probe.get_video_metadata(video_path)
+
+            if not metadata:
+                return {}
+
+            # Extract key information
+            video_info = {
+                "duration": metadata.get("duration", 0),
+                "width": metadata.get("video", {}).get("width", 0),
+                "height": metadata.get("video", {}).get("height", 0),
+                "fps": metadata.get("video", {}).get("fps", 25.0),
+                "bitrate": metadata.get("bitrate", 0),
+                "size_bytes": metadata.get("size", 0),
+                "codec": metadata.get("video", {}).get("codec", ""),
+                "storage_type": os.getenv("VIDEO_ENGINE_STORAGE", "local"),
+                "preset": os.getenv("VIDEO_ENGINE_PRESET", "medium"),
+                "generated_at": time.time()
+            }
+
+            return video_info
+
+        except Exception as e:
+            logger.error(f"Failed to extract metadata for job {job_id}: {e}")
+            return {}
 
     async def _cleanup_temp_files(self, job_id: str) -> None:
         """Clean up temporary files."""
