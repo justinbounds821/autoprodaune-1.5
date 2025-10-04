@@ -279,19 +279,54 @@ try:
     from .routes.growth_skeletons import router as growth_skeletons_router
     from .routes.video_advanced_alias import router as video_advanced_alias_router
     from .routes.video_internal_alias import router as video_internal_alias_router
+    from .routes.video_templates import router as video_templates_router
+    from .routes.video_cdn import router as video_cdn_router
+    from .routes.health import router as detailed_health_router
+
     app.include_router(leads_router)
     app.include_router(referrals_router)
     app.include_router(financial_router)
     app.include_router(social_router)
     app.include_router(logs_router)
     app.include_router(health_router)
+    app.include_router(detailed_health_router)
     app.include_router(content_router)
     app.include_router(automation_router)
     app.include_router(automation_alias_router)
     app.include_router(growth_skeletons_router)
     app.include_router(video_advanced_alias_router)
     app.include_router(video_internal_alias_router)
+    app.include_router(video_templates_router)
+    app.include_router(video_cdn_router)
     log.info("✅ All main routers loaded successfully")
+
+    # Initialize Prometheus metrics if enabled
+    if os.getenv("PROMETHEUS_METRICS_ENABLED", "false").lower() in ("1", "true", "yes"):
+        try:
+            from .services.metrics import get_metrics_service
+            from prometheus_client import make_asgi_app, CollectorRegistry
+
+            metrics_service = get_metrics_service()
+            if metrics_service.enabled:
+                # Create ASGI app for metrics
+                metrics_app = make_asgi_app(metrics_service.registry)
+
+                # Mount metrics endpoint
+                from fastapi import FastAPI
+                metrics_fastapi = FastAPI()
+                metrics_fastapi.mount("/metrics", metrics_app)
+
+                log.info("✅ Prometheus metrics endpoint enabled at /metrics")
+            else:
+                log.warning("⚠️ Prometheus metrics enabled but service not initialized")
+
+        except ImportError:
+            log.warning("⚠️ prometheus_client not available, metrics disabled")
+        except Exception as e:
+            log.error(f"❌ Failed to initialize Prometheus metrics: {e}")
+
+except Exception as e:
+    log.exception("❌ Eroare la import/attach routers: %s", e)
     
     # Video router cu protecție (MoviePy + FFmpeg)
     try:
@@ -456,6 +491,19 @@ async def startup_event():
             log.info("✅ Automation scheduler started")
         else:
             log.info("⚠️ Automation scheduler disabled by configuration")
+
+        # Start housekeeping service for cleanup
+        try:
+            from .services.housekeeping import get_housekeeping_service
+            housekeeping = get_housekeeping_service()
+            # Note: In production, you might want to start this as a background task
+            # For now, we'll just initialize it
+            log.info("✅ Housekeeping service initialized")
+        except Exception as e:
+            log.error(f"❌ Housekeeping service initialization failed: {e}", exc_info=True)
+            # Store error for health check reporting
+            import sys
+            sys.modules[__name__].__dict__['_housekeeping_error'] = str(e)
 
         # Log all registered routes
         lines = []

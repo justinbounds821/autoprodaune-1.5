@@ -1,0 +1,52 @@
+{
+  "name": "News Anchor",
+  "description": "Professional news anchor template with lower third text overlay",
+  "duration": 90,
+  "fps": 25,
+  "canvas": "1280x720",
+  "layers": [
+    {
+      "type": "bg",
+      "in": 0,
+      "out": 90,
+      "params": {
+        "type": "color",
+        "color": "#1a1a2e"
+      }
+    },
+    {
+      "type": "video",
+      "in": 0,
+      "out": 90,
+      "params": {
+        "scale": 0.7,
+        "x": 0.05,
+        "y": 0.15
+      }
+    },
+    {
+      "type": "text",
+      "in": 0,
+      "out": 90,
+      "params": {
+        "text": "NEWS ANCHOR",
+        "x": 0.5,
+        "y": 0.85,
+        "fontsize": 32,
+        "fontcolor": "white",
+        "box": true,
+        "boxcolor": "0x00000080",
+        "boxborderw": 5
+      }
+    },
+    {
+      "type": "captions",
+      "in": 0,
+      "out": 90,
+      "params": {
+        "style": "white_text"
+      }
+    }
+  ],
+  "tags": ["news", "anchor", "professional", "lower_third"]
+}

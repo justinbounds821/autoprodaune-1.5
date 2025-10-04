@@ -1,0 +1,37 @@
+{
+  "name": "Default Talking Head",
+  "description": "Standard talking head template with background, avatar, and captions",
+  "duration": 60,
+  "fps": 25,
+  "canvas": "1280x720",
+  "layers": [
+    {
+      "type": "bg",
+      "in": 0,
+      "out": 60,
+      "params": {
+        "type": "color",
+        "color": "black"
+      }
+    },
+    {
+      "type": "video",
+      "in": 0,
+      "out": 60,
+      "params": {
+        "scale": 0.8,
+        "x": 0.2,
+        "y": 0.2
+      }
+    },
+    {
+      "type": "captions",
+      "in": 0,
+      "out": 60,
+      "params": {
+        "style": "white_text"
+      }
+    }
+  ],
+  "tags": ["talking_head", "default", "basic"]
+}

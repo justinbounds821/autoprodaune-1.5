@@ -1,0 +1,52 @@
+{
+  "name": "Explainer Video",
+  "description": "Educational explainer template with clean background and centered avatar",
+  "duration": 120,
+  "fps": 25,
+  "canvas": "1280x720",
+  "layers": [
+    {
+      "type": "bg",
+      "in": 0,
+      "out": 120,
+      "params": {
+        "type": "gradient",
+        "color1": "#667eea",
+        "color2": "#764ba2"
+      }
+    },
+    {
+      "type": "video",
+      "in": 0,
+      "out": 120,
+      "params": {
+        "scale": 0.6,
+        "x": 0.2,
+        "y": 0.2
+      }
+    },
+    {
+      "type": "text",
+      "in": 0,
+      "out": 120,
+      "params": {
+        "text": "EXPLAINER",
+        "x": 0.5,
+        "y": 0.9,
+        "fontsize": 28,
+        "fontcolor": "white",
+        "box": true,
+        "boxcolor": "0x00000060"
+      }
+    },
+    {
+      "type": "captions",
+      "in": 0,
+      "out": 120,
+      "params": {
+        "style": "white_text_large"
+      }
+    }
+  ],
+  "tags": ["explainer", "educational", "gradient", "centered"]
+}
