@@ -43,6 +43,14 @@ Write-Host "📄 Found migration file: $migrationFile" -ForegroundColor Green
 
 # Read migration SQL
 try {
+    # Check if phase 6 migration exists and include it
+    $phase6File = "services/api/database/video_engine_phase6.sql"
+    if (Test-Path $phase6File) {
+        Write-Host "📄 Including phase 6 migration file: $phase6File" -ForegroundColor Green
+        $phase6Sql = Get-Content $phase6File -Raw -Encoding UTF8
+        $migrationSql = $migrationSql + "`n`n-- Phase 6 Migration`n" + $phase6Sql
+    }
+
     $migrationSql = Get-Content $migrationFile -Raw -Encoding UTF8
 } catch {
     Write-Error "❌ Failed to read migration file: $_"

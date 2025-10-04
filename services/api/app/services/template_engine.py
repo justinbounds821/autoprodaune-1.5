@@ -46,7 +46,7 @@ class TemplateEngine:
         return self._build_default_timeline(request, audio_duration)
 
     def _load_template(self, template_id: str) -> Optional[Dict[str, Any]]:
-        """Load template from file."""
+        """Load template from file system."""
         template_path = self.templates_dir / f"{template_id}.json"
 
         if not template_path.exists():
@@ -61,6 +61,33 @@ class TemplateEngine:
         except Exception as e:
             logger.error(f"Failed to load template {template_id}: {e}")
             return None
+
+    def list_available_templates(self) -> List[Dict[str, Any]]:
+        """List all available templates in the templates directory."""
+        templates = []
+
+        try:
+            for template_file in self.templates_dir.glob("*.json"):
+                try:
+                    with open(template_file, 'r', encoding='utf-8') as f:
+                        template = json.load(f)
+
+                    templates.append({
+                        "id": template_file.stem,
+                        "name": template.get("name", template_file.stem),
+                        "description": template.get("description", ""),
+                        "duration": template.get("duration", 60),
+                        "layers": len(template.get("layers", [])),
+                        "tags": template.get("tags", [])
+                    })
+
+                except Exception as e:
+                    logger.warning(f"Failed to load template {template_file}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to list templates: {e}")
+
+        return templates
 
     def _apply_template(self, template: Dict[str, Any], request: Dict[str, Any], audio_duration: float) -> Dict[str, Any]:
         """Apply template with request parameters."""

@@ -29,14 +29,32 @@ class FFmpegCompositor:
             self.width, self.height = 1280, 720
             logger.warning(f"Invalid canvas format '{self.canvas}', using 1280x720")
 
-        # Preset configurations
+        # Enhanced preset configurations for production use
         self.preset_configs = {
-            "low": {"bitrate": "1000k", "profile": "baseline"},
-            "medium": {"bitrate": "2500k", "profile": "main"},
-            "high": {"bitrate": "5000k", "profile": "high"}
+            "low": {
+                "bitrate": "1200k",
+                "profile": "baseline",
+                "level": "3.0",
+                "tune": "fastdecode",
+                "preset": "ultrafast"
+            },
+            "medium": {
+                "bitrate": "2500k",
+                "profile": "main",
+                "level": "4.0",
+                "tune": "film",
+                "preset": "fast"
+            },
+            "high": {
+                "bitrate": "4500k",
+                "profile": "high",
+                "level": "4.1",
+                "tune": "film",
+                "preset": "medium"
+            }
         }
 
-        logger.info(f"✅ FFmpeg compositor initialized: {self.canvas}@{self.fps}fps, preset={self.preset}")
+        logger.info(f"✅ FFmpeg compositor initialized: {self.canvas}@{self.fps}fps, preset={self.preset} ({preset_config['bitrate']} @ {preset_config['profile']})")
 
     def _get_audio_filter(self, audio_path: str) -> str:
         """Generate audio filter for FFmpeg."""
@@ -252,7 +270,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # Get preset configuration
             preset_config = self.preset_configs.get(self.preset, self.preset_configs["medium"])
 
-            # Build FFmpeg command
+            # Build FFmpeg command with enhanced settings
             cmd = [
                 "ffmpeg", "-y", "-loglevel", "error"
             ]
@@ -272,17 +290,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if image_layer and image_layer.get("params", {}).get("image_path"):
                 cmd.extend(["-i", image_layer["params"]["image_path"]])
 
-            # Video codec settings
+            # Enhanced video codec settings for production
             cmd.extend([
                 "-c:v", "libx264",
                 "-pix_fmt", "yuv420p",
                 "-profile:v", preset_config["profile"],
+                "-level:v", preset_config["level"],
+                "-tune:v", preset_config["tune"],
+                "-preset:v", preset_config["preset"],
                 "-b:v", preset_config["bitrate"],
+                "-maxrate:v", preset_config["bitrate"],
+                "-bufsize:v", f"{int(preset_config['bitrate'].rstrip('k')) * 2}k",
                 "-r", str(self.fps),
                 "-s", self.canvas,
+                "-movflags", "+faststart",  # Enable streaming
                 "-shortest",  # Match shortest input
                 "-c:a", "aac",
                 "-b:a", "128k",
+                "-ar", "44100",  # Standard sample rate
+                "-ac", "2",      # Stereo audio
                 output_path
             ])
 
@@ -304,6 +330,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         except Exception as e:
             logger.error(f"Video composition error: {e}")
             return False
+
+    def get_preset_config(self) -> Dict[str, Any]:
+        """Get current preset configuration."""
+        return self.preset_configs.get(self.preset, self.preset_configs["medium"])
 
     def get_video_info(self, video_path: str) -> Dict[str, Any]:
         """

@@ -42,7 +42,7 @@ class SupabaseJobRepo:
 
     def save_job(self, job_id: str, job_data: Dict[str, Any]) -> bool:
         """
-        Save or update job in Supabase.
+        Save or update job in Supabase with idempotency support.
 
         Args:
             job_id: Job identifier
@@ -71,11 +71,20 @@ class SupabaseJobRepo:
                 "updated_at": datetime.utcnow().isoformat()
             }
 
+            # Add idempotency support
+            idempotency_key = job_data.get("idempotency_key")
+            if idempotency_key:
+                data["idempotency_key"] = idempotency_key
+
+            # Add retry information
+            retry_count = job_data.get("retry_count", 0)
+            data["retry_count"] = retry_count
+
             # Upsert job
             result = self.client.table("video_jobs").upsert(data).execute()
 
             if result.data:
-                logger.info(f"✅ Saved job {job_id} to Supabase")
+                logger.info(f"✅ Saved job {job_id} to Supabase (retry: {retry_count})")
                 return True
             else:
                 logger.error(f"Failed to save job {job_id} to Supabase")
@@ -87,7 +96,7 @@ class SupabaseJobRepo:
 
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get job from Supabase.
+        Get job from Supabase with optimized queries.
 
         Args:
             job_id: Job identifier
@@ -100,6 +109,7 @@ class SupabaseJobRepo:
             return None
 
         try:
+            # Use indexed query for better performance
             result = self.client.table("video_jobs").select("*").eq("job_id", job_id).execute()
 
             if result.data and len(result.data) > 0:
@@ -121,9 +131,45 @@ class SupabaseJobRepo:
             logger.error(f"Error getting job {job_id} from Supabase: {e}")
             return None
 
+    def get_job_by_idempotency_key(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """
+        Get job by idempotency key for duplicate prevention.
+
+        Args:
+            idempotency_key: Idempotency key
+
+        Returns:
+            Job data dictionary or None if not found
+        """
+        if not self.enabled or not self.client:
+            logger.debug(f"Supabase disabled, would get job by idempotency key {idempotency_key}")
+            return None
+
+        try:
+            result = self.client.table("video_jobs").select("*").eq("idempotency_key", idempotency_key).order("created_at", desc=True).limit(1).execute()
+
+            if result.data and len(result.data) > 0:
+                job = result.data[0]
+                # Parse JSON fields
+                if job.get("timeline"):
+                    try:
+                        job["timeline"] = json.loads(job["timeline"])
+                    except:
+                        job["timeline"] = {}
+
+                logger.debug(f"Retrieved job by idempotency key {idempotency_key}")
+                return job
+            else:
+                logger.debug(f"No job found for idempotency key {idempotency_key}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error getting job by idempotency key {idempotency_key}: {e}")
+            return None
+
     def update_job_status(self, job_id: str, status: str, **kwargs) -> bool:
         """
-        Update job status in Supabase.
+        Update job status in Supabase with retry support.
 
         Args:
             job_id: Job identifier
@@ -155,6 +201,78 @@ class SupabaseJobRepo:
 
         except Exception as e:
             logger.error(f"Error updating job {job_id} status in Supabase: {e}")
+            return False
+
+    def get_recent_jobs(self, limit: int = 20) -> list:
+        """
+        Get recent jobs for monitoring.
+
+        Args:
+            limit: Maximum number of jobs to return
+
+        Returns:
+            List of recent job dictionaries
+        """
+        if not self.enabled or not self.client:
+            logger.debug(f"Supabase disabled, would get recent jobs (limit: {limit})")
+            return []
+
+        try:
+            result = self.client.table("video_jobs").select("*").order("created_at", desc=True).limit(limit).execute()
+
+            jobs = []
+            for job in result.data:
+                # Parse JSON fields
+                if job.get("timeline"):
+                    try:
+                        job["timeline"] = json.loads(job["timeline"])
+                    except:
+                        job["timeline"] = {}
+
+                jobs.append(job)
+
+            logger.debug(f"Retrieved {len(jobs)} recent jobs from Supabase")
+            return jobs
+
+        except Exception as e:
+            logger.error(f"Error getting recent jobs from Supabase: {e}")
+            return []
+
+    def increment_retry_count(self, job_id: str) -> bool:
+        """
+        Increment retry count for a job.
+
+        Args:
+            job_id: Job identifier
+
+        Returns:
+            True if incremented successfully, False otherwise
+        """
+        if not self.enabled or not self.client:
+            logger.debug(f"Supabase disabled, would increment retry count for job {job_id}")
+            return False
+
+        try:
+            # Get current retry count
+            job = self.get_job(job_id)
+            current_retry = job.get("retry_count", 0) if job else 0
+
+            update_data = {
+                "retry_count": current_retry + 1,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+
+            result = self.client.table("video_jobs").update(update_data).eq("job_id", job_id).execute()
+
+            if result.data:
+                logger.info(f"✅ Incremented retry count for job {job_id} to {current_retry + 1}")
+                return True
+            else:
+                logger.error(f"Failed to increment retry count for job {job_id}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error incrementing retry count for job {job_id}: {e}")
             return False
 
     def save_cost(self, job_id: str, cost_data: Dict[str, Any]) -> bool:

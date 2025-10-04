@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    ports:
+      - "8001:8001"
+    environment:
+      # Core configuration
+      - PORT=8001
+      - HOST=0.0.0.0
+
+      # Database
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+
+      # Video Engine Configuration
+      - USE_INTERNAL_VIDEO_ENGINE=true
+      - LIPSYNC_BACKEND=sadtalker
+      - VIDEO_ENGINE_FPS=25
+      - VIDEO_ENGINE_CANVAS=1280x720
+      - VIDEO_ENGINE_PRESET=medium
+      - VIDEO_ENGINE_STORAGE=local
+      - VIDEO_ENGINE_MAX_CONCURRENCY=2
+      - VIDEO_ENGINE_QUEUE_LIMIT=20
+
+      # Cost tracking
+      - TTS_COST_PER_SECOND=0.0001
+      - PROCESSING_COST_PER_SECOND=0.001
+      - STORAGE_COST_PER_MB=0.01
+
+      # TTS
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - ELEVENLABS_VOICE_ID=Rachel
+
+      # Storage (R2 for production)
+      - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME:-autopro-videos}
+
+      # Webhooks
+      - WEBHOOK_COMPLETED_URL=${WEBHOOK_COMPLETED_URL}
+
+      # Monitoring
+      - PROMETHEUS_METRICS_ENABLED=true
+
+      # Logging
+      - LOG_LEVEL=INFO
+
+    volumes:
+      # Mount templates directory
+      - ../services/api/app/templates:/app/app/templates:ro
+      # Mount generated videos (for local storage)
+      - ../services/api/generated_videos:/app/generated_videos
+      # Mount any third-party tools (SadTalker, Wav2Lip)
+      - ../services/api/third_party:/app/third_party:ro
+
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional: Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    profiles:
+      - monitoring
+
+  # Optional: Grafana for dashboards
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    profiles:
+      - monitoring
+
+volumes:
+  grafana_data:

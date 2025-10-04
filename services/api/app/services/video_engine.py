@@ -27,12 +27,14 @@ class VideoEngine:
         self.storage_service = None
         self.cost_tracker = None
         self.webhook_notifier = None
+        self.metrics_service = None
+        self.captions_generator = None
 
         logger.info("✅ Video engine initialized")
 
     async def generate_video(self, request: Dict[str, Any]) -> str:
         """
-        Generate video from request.
+        Generate video from request with idempotency and retry support.
 
         Args:
             request: Video generation request
@@ -43,6 +45,16 @@ class VideoEngine:
         Raises:
             Exception: If validation fails or generation fails
         """
+        start_time = time.time()
+
+        # Check idempotency first
+        idempotency_key = request.get("extra", {}).get("idempotency_key")
+        if idempotency_key and self.job_repo:
+            existing_job = await self.job_repo.get_job_by_idempotency_key(idempotency_key)
+            if existing_job:
+                logger.info(f"Returning existing job for idempotency key: {idempotency_key}")
+                return existing_job["job_id"]
+
         # Validate request
         self._validate_request(request)
 
@@ -53,13 +65,36 @@ class VideoEngine:
             # Initialize services
             await self._init_services()
 
-            # Create job entry
-            await self._create_job(job_id, request)
+            # Record metrics
+            if self.metrics_service:
+                self.metrics_service.record_job_status("queued")
 
-            # Start background processing
-            asyncio.create_task(self._process_job(job_id, request))
+            # Create job entry with metadata
+            job_data = request.copy()
+            job_data.update({
+                "idempotency_key": idempotency_key,
+                "retry_count": 0,
+                "meta": {
+                    "preset": os.getenv("VIDEO_ENGINE_PRESET", "medium"),
+                    "fps": os.getenv("VIDEO_ENGINE_FPS", "25"),
+                    "backend": os.getenv("LIPSYNC_BACKEND", "sadtalker"),
+                    "storage": os.getenv("VIDEO_ENGINE_STORAGE", "local"),
+                    "created_at": time.time()
+                }
+            })
 
-            logger.info(f"✅ Video generation queued: {job_id}")
+            await self._create_job(job_id, job_data)
+
+            # Start background processing with retry capability
+            asyncio.create_task(self._process_job_with_retry(job_id, request))
+
+            logger.info(f"✅ Video generation queued: {job_id} (idempotency: {idempotency_key})")
+
+            # Record queue metrics
+            if self.metrics_service and self.job_store:
+                stats = self.job_store.get_queue_stats()
+                self.metrics_service.update_queue_metrics(stats["queue_length"], stats["processing_count"])
+
             return job_id
 
         except Exception as e:
@@ -69,6 +104,11 @@ class VideoEngine:
                 self.job_store.set_status(job_id, "failed", error=str(e))
             if self.job_repo:
                 await self.job_repo.update_job_status(job_id, "failed", error=str(e))
+
+            # Record failure metric
+            if self.metrics_service:
+                self.metrics_service.record_job_failure("queue_error")
+
             raise
 
     async def _init_services(self) -> None:
@@ -108,6 +148,14 @@ class VideoEngine:
         if not self.webhook_notifier:
             from .webhook_notifier import get_webhook_notifier
             self.webhook_notifier = get_webhook_notifier()
+
+        if not self.metrics_service:
+            from .metrics import get_metrics_service
+            self.metrics_service = get_metrics_service()
+
+        if not self.captions_generator:
+            from .captions_generator import get_captions_generator
+            self.captions_generator = get_captions_generator()
 
     def _validate_request(self, request: Dict[str, Any]) -> None:
         """Validate video generation request."""
@@ -154,58 +202,121 @@ class VideoEngine:
             await self.job_repo.save_job(job_id, job_data)
 
     async def _process_job(self, job_id: str, request: Dict[str, Any]) -> None:
-        """Process video generation job."""
-        start_time = asyncio.get_event_loop().time()
+        """Process video generation job with metrics and structured logging."""
+        start_time = time.time()
+        phase_start = start_time
 
         try:
             # Update status to processing
             await self._update_job_status(job_id, "processing")
+            self._log_job_event(job_id, "processing_start", "Started processing")
+
+            # Record backend availability
+            if self.metrics_service and self.lipsync_backend:
+                backend_info = self.lipsync_backend.get_backend_info()
+                self.metrics_service.set_backend_availability(
+                    backend_info["backend"],
+                    backend_info["available"]
+                )
 
             # Step 1: Generate TTS audio
-            logger.info(f"🎵 Generating TTS for job {job_id}")
+            self._log_job_event(job_id, "tts_start", "Starting TTS generation")
+            tts_start = time.time()
             audio_data, audio_duration = await self._generate_tts_audio(request)
+            tts_duration = time.time() - tts_start
+
+            self._log_job_event(job_id, "tts_complete", f"TTS generated in {tts_duration:.2f}s")
+            if self.metrics_service:
+                self.metrics_service.record_tts_duration(audio_duration)
 
             # Step 2: Build timeline
-            logger.info(f"📋 Building timeline for job {job_id}")
+            self._log_job_event(job_id, "timeline_start", "Building video timeline")
+            timeline_start = time.time()
             timeline = await self._build_timeline(request, audio_duration)
+            timeline_duration = time.time() - timeline_start
+
+            self._log_job_event(job_id, "timeline_complete", f"Timeline built in {timeline_duration:.2f}s")
 
             # Step 3: Generate lip-sync video (if enabled)
             lipsync_backend = os.getenv("LIPSYNC_BACKEND", "sadtalker").lower()
             avatar_video_path = None
 
             if lipsync_backend != "none" and self.lipsync_backend.is_available():
-                logger.info(f"🎭 Generating lip-sync for job {job_id}")
+                self._log_job_event(job_id, "lipsync_start", f"Starting lip-sync with {lipsync_backend}")
+                lipsync_start = time.time()
                 avatar_video_path = await self._generate_lipsync_video(job_id, request, audio_data)
+                lipsync_duration = time.time() - lipsync_start
+
+                self._log_job_event(job_id, "lipsync_complete", f"Lip-sync completed in {lipsync_duration:.2f}s")
             else:
-                logger.info(f"⏭️ Skipping lip-sync for job {job_id}")
+                self._log_job_event(job_id, "lipsync_skip", f"Skipping lip-sync (backend: {lipsync_backend})")
 
             # Step 4: Compose final video
-            logger.info(f"🎬 Composing final video for job {job_id}")
+            self._log_job_event(job_id, "composition_start", "Starting video composition")
+            composition_start = time.time()
             final_video_path = await self._compose_video(job_id, timeline, audio_data, avatar_video_path)
+            composition_duration = time.time() - composition_start
+
+            self._log_job_event(job_id, "composition_complete", f"Video composed in {composition_duration:.2f}s")
+
+            # Get video file size for metrics
+            video_size_bytes = 0
+            if os.path.exists(final_video_path):
+                video_size_bytes = os.path.getsize(final_video_path)
+                if self.metrics_service:
+                    self.metrics_service.record_video_size(video_size_bytes)
 
             # Step 5: Upload to storage
-            logger.info(f"📦 Uploading video for job {job_id}")
+            self._log_job_event(job_id, "upload_start", "Uploading video to storage")
+            upload_start = time.time()
             video_url = await self._upload_video(job_id, final_video_path)
+            upload_duration = time.time() - upload_start
+
+            self._log_job_event(job_id, "upload_complete", f"Video uploaded in {upload_duration:.2f}s")
 
             # Step 6: Calculate and save costs
-            processing_duration = asyncio.get_event_loop().time() - start_time
+            processing_duration = time.time() - start_time
+            self._log_job_event(job_id, "cost_calculation", f"Calculating costs for {processing_duration:.2f}s processing")
             await self._calculate_and_save_costs(job_id, request, audio_duration, processing_duration)
 
             # Step 7: Update job as completed
             await self._update_job_status(job_id, "completed", video_url=video_url)
+            self._log_job_event(job_id, "job_complete", f"Job completed successfully in {processing_duration:.2f}s")
 
             # Step 8: Send webhook notification
             await self._send_webhook_notification(job_id, "completed", video_url)
 
+            # Record final metrics
+            if self.metrics_service:
+                self.metrics_service.record_processing_duration(processing_duration, "completed")
+                total_cost = request.get("meta", {}).get("total_cost_cents", 0)
+                if total_cost > 0:
+                    self.metrics_service.record_total_cost(total_cost)
+
             logger.info(f"✅ Video generation completed: {job_id}")
 
         except Exception as e:
-            logger.error(f"❌ Video generation failed for job {job_id}: {e}")
-            await self._update_job_status(job_id, "failed", error=str(e))
-            await self._send_webhook_notification(job_id, "failed", error=str(e))
+            error_msg = str(e)
+            processing_duration = time.time() - start_time
+
+            self._log_job_event(job_id, "job_failed", f"Job failed after {processing_duration:.2f}s: {error_msg}")
+
+            # Record failure metrics
+            if self.metrics_service:
+                self.metrics_service.record_processing_duration(processing_duration, "failed")
+                self.metrics_service.record_job_failure("processing_error")
+
+            await self._update_job_status(job_id, "failed", error=error_msg)
+            await self._send_webhook_notification(job_id, "failed", error=error_msg)
+            raise
         finally:
             # Clean up temporary files
             await self._cleanup_temp_files(job_id)
+
+            # Update queue metrics
+            if self.metrics_service and self.job_store:
+                stats = self.job_store.get_queue_stats()
+                self.metrics_service.update_queue_metrics(stats["queue_length"], stats["processing_count"])
 
     async def _generate_tts_audio(self, request: Dict[str, Any]) -> tuple[bytes, float]:
         """Generate TTS audio and return duration."""
@@ -346,6 +457,60 @@ class VideoEngine:
         """Clean up temporary files."""
         # Implementation would clean up temp files created during processing
         pass
+
+    async def _process_job_with_retry(self, job_id: str, request: Dict[str, Any]) -> None:
+        """Process job with retry logic and structured logging."""
+        max_retries = int(os.getenv("VIDEO_ENGINE_RETRY_LIMIT", "2"))
+        retry_backoff = int(os.getenv("VIDEO_ENGINE_RETRY_BACKOFF", "6"))
+
+        for attempt in range(max_retries + 1):
+            try:
+                self._log_job_event(job_id, "start_attempt", f"Attempt {attempt + 1}/{max_retries + 1}")
+
+                # Update retry count
+                if attempt > 0 and self.job_repo:
+                    await self.job_repo.increment_retry_count(job_id)
+
+                # Process the job
+                await self._process_job(job_id, request)
+
+                # Success - exit retry loop
+                self._log_job_event(job_id, "completed", f"Success after {attempt + 1} attempts")
+                break
+
+            except Exception as e:
+                logger.warning(f"❌ Job {job_id} failed on attempt {attempt + 1}: {e}")
+
+                if attempt < max_retries:
+                    # Wait before retry with exponential backoff
+                    wait_time = retry_backoff * (2 ** attempt)
+                    self._log_job_event(job_id, "retry_wait", f"Waiting {wait_time}s before retry")
+                    await asyncio.sleep(wait_time)
+                else:
+                    # Final failure
+                    self._log_job_event(job_id, "final_failure", f"Failed after {max_retries + 1} attempts: {e}")
+                    await self._update_job_status(job_id, "failed", error=str(e))
+
+                    # Record failure metrics
+                    if self.metrics_service:
+                        self.metrics_service.record_job_failure("max_retries_exceeded")
+
+                    # Send webhook for final failure
+                    await self._send_webhook_notification(job_id, "failed", error=str(e))
+
+    def _log_job_event(self, job_id: str, phase: str, message: str, duration_ms: float = None) -> None:
+        """Structured logging for job events."""
+        log_data = {
+            "job_id": job_id,
+            "phase": phase,
+            "message": message,
+            "timestamp": time.time()
+        }
+
+        if duration_ms:
+            log_data["duration_ms"] = duration_ms
+
+        logger.info(f"🎬 Job {job_id}: {phase} - {message}", extra=log_data)
 
     def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Get job status."""
