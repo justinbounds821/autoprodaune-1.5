@@ -96,9 +96,32 @@ class AutoProApiService {
   triggerAutomation = async () => api.post("/api/automation/trigger").then(r=>r.data);
   updateAutomationSettings = async (settings:any) => api.post("/api/automation/settings", settings).then(r=>r.data);
   getAutomationLogs = async () => api.get("/api/automation/logs").then(r=>r.data);
+  
+  // PHASE 8/9: AI Enhancements & Video Intelligence
+  getAIHealth = async () => api.get("/api/video/ai/health").then(r=>r.data);
+  getInsights = async (jobId: string) => api.get(`/api/video/ai/insights/${jobId}`).then(r=>r.data);
+  searchVideos = async (query: string, minScore: number = 0.7, limit: number = 10) => 
+    api.post("/api/video/ai/search/similar", null, { params: { query, min_score: minScore, limit } }).then(r=>r.data);
+  processAIFeatures = async (jobId: string) => api.post(`/api/video/ai/process/${jobId}`).then(r=>r.data);
+  getCaptions = async (jobId: string, format: "srt" | "ass" = "srt") => 
+    api.get(`/api/video/ai/captions/${jobId}`, { params: { format } }).then(r=>r.data);
+  
+  // CDN Management
+  getCDNInfo = async () => api.get("/api/video/cdn/info").then(r=>r.data);
+  getJobCDNUrl = async (jobId: string, signed: boolean = false, ttlSeconds?: number) =>
+    api.get(`/api/video/cdn/jobs/${jobId}/url`, { params: { signed, ttl_seconds: ttlSeconds } }).then(r=>r.data);
+  purgeCDNCache = async (jobId: string) => api.post(`/api/video/cdn/purge/${jobId}`).then(r=>r.data);
+  getCDNStats = async () => api.get("/api/video/cdn/stats").then(r=>r.data);
+  
+  // Templates & Costs
+  getTemplates = async (category?: string) => 
+    api.get("/api/video/templates", { params: { category } }).then(r=>r.data);
+  getTemplate = async (templateId: string) => api.get(`/api/video/templates/${templateId}`).then(r=>r.data);
+  getJobCosts = async (jobId: string) => api.get(`/api/video/templates/costs/${jobId}`).then(r=>r.data);
 }
 
 const svc = new AutoProApiService();
 export default svc;                // default
 export { api };                    // low-level axios (dacă ai nevoie)
+export { svc as autoproApi };      // named export for components
 export type { AutoProApiService }; // tipuri opționale

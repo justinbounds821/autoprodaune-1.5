@@ -12,6 +12,7 @@ import AutomationControl from './AutomationControl';
 import SocialMedia from './SocialMedia';
 import FinancialDashboard from './FinancialDashboard';
 import LeadManagement from './LeadManagement';
+import AIInsightsDashboard from '../components/ai-insights/AIInsightsDashboard';
 
 const queryClient = new QueryClient();
 
@@ -54,6 +55,7 @@ const AdminApp: React.FC = () => {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="videos" element={<VideoManagement />} />
+            <Route path="insights" element={<AIInsightsDashboard />} />
             <Route path="automation" element={<AutomationControl />} />
             <Route path="social" element={<SocialMedia />} />
             <Route path="financial" element={<FinancialDashboard />} />
