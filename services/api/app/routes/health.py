@@ -84,4 +84,26 @@ async def detailed_health_check() -> Dict[str, Any]:
         health_status["dependencies"]["n8n"] = f"unhealthy: {str(e)}"
         health_status["status"] = "degraded"
     
+    # Check Phase 8/9 AI Services
+    try:
+        from ..services.vector_store import get_vector_store
+        from ..services.whisper_captions import get_whisper_service
+        from ..services.scene_detect import get_scene_detector
+        from ..services.tagging_service import get_tagging_service
+        from ..services.cdn_manager import get_cdn_manager
+        from ..services.cost_tracker import get_cost_tracker
+        from ..services.housekeeping import get_housekeeping_service
+        
+        health_status["ai_services"] = {
+            "vector_search": get_vector_store().get_health(),
+            "whisper_captions": get_whisper_service().get_health(),
+            "scene_detection": get_scene_detector().get_health(),
+            "tagging": get_tagging_service().get_health(),
+            "cdn_manager": get_cdn_manager().get_health(),
+            "cost_tracker": get_cost_tracker().get_health(),
+            "housekeeping": get_housekeeping_service().get_health()
+        }
+    except Exception as e:
+        health_status["ai_services"] = f"error: {str(e)}"
+    
     return health_status

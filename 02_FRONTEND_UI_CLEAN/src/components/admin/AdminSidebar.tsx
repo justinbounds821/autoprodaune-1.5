@@ -7,7 +7,8 @@ import {
   Share2,
   DollarSign,
   Users,
-  Building2
+  Building2,
+  Brain
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +24,12 @@ const navigation = [
     href: '/admin/videos',
     icon: Video,
     description: 'Video generation and management'
+  },
+  {
+    name: 'AI Insights',
+    href: '/admin/insights',
+    icon: Brain,
+    description: 'AI-powered video insights and search'
   },
   {
     name: 'Automation',

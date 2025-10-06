@@ -421,6 +421,34 @@ try:
 except ImportError as e:
     log.warning("⚠️ Master Growth Activation dezactivat: %s", e)
 
+# ============================================
+# PHASE 8/9: AI ENHANCEMENTS & VIDEO ENGINE
+# ============================================
+
+# 🧠 VIDEO AI - AI-powered insights, search, tagging, captions
+try:
+    from .routes.video_ai import router as video_ai_router
+    app.include_router(video_ai_router)
+    log.info("🧠 VIDEO AI ROUTER LOADED - Semantic search, insights, captions enabled")
+except ImportError as e:
+    log.warning("⚠️ Video AI router not available: %s", e)
+
+# 🌐 VIDEO CDN - CDN management, cache control, delivery
+try:
+    from .routes.video_cdn import router as video_cdn_router
+    app.include_router(video_cdn_router)
+    log.info("🌐 VIDEO CDN ROUTER LOADED - CDN caching and delivery enabled")
+except ImportError as e:
+    log.warning("⚠️ Video CDN router not available: %s", e)
+
+# 📋 VIDEO TEMPLATES - Template management and presets
+try:
+    from .routes.video_templates import router as video_templates_router
+    app.include_router(video_templates_router)
+    log.info("📋 VIDEO TEMPLATES ROUTER LOADED - Template system enabled")
+except ImportError as e:
+    log.warning("⚠️ Video Templates router not available: %s", e)
+
 
 # Utility function for JSON logging
 def jlog(event: str, **kwargs):
