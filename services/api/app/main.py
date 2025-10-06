@@ -449,6 +449,22 @@ try:
 except ImportError as e:
     log.warning("⚠️ Video Templates router not available: %s", e)
 
+# 📡 VIDEO WEBHOOKS - Webhook management and logs
+try:
+    from .routes.video_webhooks import router as video_webhooks_router
+    app.include_router(video_webhooks_router)
+    log.info("📡 VIDEO WEBHOOKS ROUTER LOADED - Webhook tracking enabled")
+except ImportError as e:
+    log.warning("⚠️ Video Webhooks router not available: %s", e)
+
+# 🧹 VIDEO HOUSEKEEPING - Auto-cleanup and maintenance
+try:
+    from .routes.video_housekeeping import router as video_housekeeping_router
+    app.include_router(video_housekeeping_router)
+    log.info("🧹 VIDEO HOUSEKEEPING ROUTER LOADED - Maintenance endpoints enabled")
+except ImportError as e:
+    log.warning("⚠️ Video Housekeeping router not available: %s", e)
+
 
 # Utility function for JSON logging
 def jlog(event: str, **kwargs):

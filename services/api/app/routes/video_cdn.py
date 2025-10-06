@@ -27,13 +27,22 @@ async def get_cdn_info():
     }
 
 
-@router.get("/jobs/{job_id}/url")
+@router.get("/url/{job_id}")
 async def get_job_cdn_url(job_id: str, signed: bool = False, ttl_seconds: Optional[int] = None):
     """
     Get CDN URL for job output video.
     Optionally generate signed URL with expiration.
     """
     try:
+        from ..services.supabase_client import get_supabase
+        supabase = get_supabase()
+        
+        # Verify job exists
+        job_response = supabase.table("video_jobs").select("output_url").eq("id", job_id).execute()
+        
+        if not job_response.data:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        
         cdn = get_cdn_manager()
         
         url_data = await cdn.get_cdn_url(
@@ -44,6 +53,8 @@ async def get_job_cdn_url(job_id: str, signed: bool = False, ttl_seconds: Option
         
         return url_data
     
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting CDN URL for {job_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get CDN URL: {str(e)}")

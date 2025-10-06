@@ -138,88 +138,27 @@ async def process_ai_features(job_id: str):
     - Extract tags and sentiment
     - Detect scenes
     - Generate captions
+    - Calculate costs
+    - Analyze audio quality
     """
     try:
-        from ..services.supabase_client import get_supabase
-        supabase = get_supabase()
+        from ..services.video_ai_processor import get_video_ai_processor
         
-        # Get job from database to get video path and metadata
-        job_response = supabase.table("video_jobs").select("*").eq("id", job_id).execute()
+        processor = get_video_ai_processor()
         
-        if not job_response.data:
-            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        if not processor.enabled:
+            raise HTTPException(
+                status_code=503, 
+                detail="AI processing disabled. Enable with ENABLE_AI_INSIGHTS=true"
+            )
         
-        job = job_response.data[0]
-        video_path = job.get("output_url") or job.get("video_url")
-        
-        if not video_path:
-            raise HTTPException(status_code=400, detail="Job has no video output yet")
-        
-        # Get services
-        vector_store = get_vector_store()
-        tagging = get_tagging_service()
-        scene_detector = get_scene_detector()
-        whisper = get_whisper_service()
-        
-        results = {
-            "job_id": job_id,
-            "processed_features": [],
-            "errors": []
-        }
-        
-        insight_data = {}
-        
-        # 1. Generate tags and sentiment
-        if tagging.enabled:
-            try:
-                content = job.get("input_text", "") or job.get("script", "")
-                tags_result = await tagging.analyze_content(content, title=job.get("title"))
-                results["processed_features"].append("tagging")
-                insight_data["tags"] = tags_result.get("tags", [])
-                insight_data["sentiment"] = tags_result.get("sentiment")
-                insight_data["sentiment_score"] = tags_result.get("sentiment_score", 0.0)
-                insight_data["entities"] = tags_result.get("entities", [])
-            except Exception as e:
-                results["errors"].append(f"Tagging failed: {str(e)}")
-        
-        # 2. Detect scenes (only if local video file)
-        if scene_detector.enabled and video_path.startswith("/") or video_path.startswith("./"):
-            try:
-                scenes = await scene_detector.detect_scenes(video_path)
-                results["processed_features"].append("scene_detection")
-                insight_data["scene_cuts"] = scenes
-            except Exception as e:
-                results["errors"].append(f"Scene detection failed: {str(e)}")
-        
-        # 3. Generate captions (only if local video file)
-        if whisper.enabled and (video_path.startswith("/") or video_path.startswith("./")):
-            try:
-                captions = await whisper.generate_captions(video_path)
-                if captions:
-                    results["processed_features"].append("captions")
-                    insight_data["captions_srt_path"] = captions.get("srt_path")
-                    insight_data["captions_ass_path"] = captions.get("ass_path")
-            except Exception as e:
-                results["errors"].append(f"Caption generation failed: {str(e)}")
-        
-        # 4. Generate vector embedding
-        if vector_store.enabled:
-            try:
-                content = job.get("input_text", "") or job.get("script", "")
-                embedding = vector_store.generate_embedding(content)
-                results["processed_features"].append("vector_embedding")
-                insight_data["vector_embedding"] = embedding
-            except Exception as e:
-                results["errors"].append(f"Embedding generation failed: {str(e)}")
-        
-        # Store insights in database
-        if insight_data:
-            insight_data["job_id"] = job_id
-            supabase.table("video_insights").upsert(insight_data).execute()
-            results["insights_saved"] = True
+        # Process all AI features using orchestrator
+        results = await processor.process_job(job_id)
         
         return results
     
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"AI processing error for {job_id}: {e}")
         raise HTTPException(status_code=500, detail=f"AI processing failed: {str(e)}")
