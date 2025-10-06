@@ -76,21 +76,53 @@ class VectorStoreService:
         
         query_embedding = self.generate_embedding(query)
         
-        if not self.enabled:
+        if not self.enabled or not query_embedding:
             # Fallback: keyword-based search
             return await self._keyword_search(query, job_ids, limit)
         
-        # TODO: Implement pgvector similarity search when DB schema ready
-        # For now, return mock results
-        return [
-            {
-                "job_id": f"job_{i}",
-                "score": 0.85 - (i * 0.05),
-                "tags": ["automotive", "insurance"],
-                "title": f"Video about {query}"
-            }
-            for i in range(min(3, limit))
-        ]
+        # Use pgvector for similarity search
+        try:
+            from ..services.supabase_client import get_supabase
+            supabase = get_supabase()
+            
+            # Query using vector similarity (if pgvector extension enabled)
+            # Note: This requires pgvector extension and vector column in video_insights
+            response = supabase.table("video_insights").select(
+                "job_id, tags, vector_embedding"
+            ).not_.is_("vector_embedding", "null").execute()
+            
+            if not response.data:
+                return []
+            
+            # Calculate cosine similarity in Python (would be done in SQL with pgvector in production)
+            import numpy as np
+            
+            results = []
+            for row in response.data:
+                if not row.get("vector_embedding"):
+                    continue
+                
+                # Calculate similarity
+                embedding = np.array(row["vector_embedding"])
+                query_emb = np.array(query_embedding)
+                
+                # Cosine similarity
+                similarity = np.dot(embedding, query_emb) / (np.linalg.norm(embedding) * np.linalg.norm(query_emb))
+                
+                if similarity >= min_score:
+                    results.append({
+                        "job_id": row["job_id"],
+                        "score": float(similarity),
+                        "tags": row.get("tags", [])
+                    })
+            
+            # Sort by score and limit
+            results.sort(key=lambda x: x["score"], reverse=True)
+            return results[:limit]
+            
+        except Exception as e:
+            logger.error(f"Vector search failed: {e}")
+            return await self._keyword_search(query, job_ids, limit)
     
     async def _keyword_search(
         self, 
@@ -100,8 +132,44 @@ class VectorStoreService:
     ) -> List[Dict[str, Any]]:
         """Fallback keyword search when embeddings unavailable"""
         logger.debug(f"Using keyword fallback search for: {query}")
-        # Simple keyword matching - would query actual DB in production
-        return []
+        
+        try:
+            from ..services.supabase_client import get_supabase
+            supabase = get_supabase()
+            
+            # Search in tags and job metadata
+            response = supabase.table("video_insights").select(
+                "job_id, tags"
+            ).execute()
+            
+            if not response.data:
+                return []
+            
+            # Simple keyword matching
+            query_words = set(query.lower().split())
+            results = []
+            
+            for row in response.data:
+                tags = row.get("tags", [])
+                tag_words = set(" ".join(tags).lower().split())
+                
+                # Calculate overlap score
+                overlap = len(query_words & tag_words)
+                if overlap > 0:
+                    score = overlap / len(query_words)
+                    results.append({
+                        "job_id": row["job_id"],
+                        "score": score,
+                        "tags": tags
+                    })
+            
+            # Sort by score and limit
+            results.sort(key=lambda x: x["score"], reverse=True)
+            return results[:limit]
+            
+        except Exception as e:
+            logger.error(f"Keyword search failed: {e}")
+            return []
     
     def get_health(self) -> Dict[str, Any]:
         """Health check for vector search"""

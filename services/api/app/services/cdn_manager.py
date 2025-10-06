@@ -131,6 +131,20 @@ class CDNManagerService:
                 response.raise_for_status()
                 
                 result = response.json()
+                
+                # Log purge to database
+                try:
+                    from ..services.supabase_client import get_supabase
+                    supabase = get_supabase()
+                    
+                    supabase.table("cdn_purge_history").insert({
+                        "job_id": job_id,
+                        "purged_urls": files_to_purge,
+                        "purged_by": "system"
+                    }).execute()
+                except Exception as log_error:
+                    logger.error(f"Failed to log CDN purge: {log_error}")
+                
                 return {
                     "purged": result.get("success", False),
                     "purged_objects": len(files_to_purge),
@@ -146,14 +160,32 @@ class CDNManagerService:
         if not self.enabled:
             return {"enabled": False}
         
-        # Mock stats - would query actual CDN API in production
-        return {
-            "enabled": True,
-            "provider": self.cdn_provider,
-            "cache_hit_ratio": 0.85,
-            "bandwidth_saved": "1.2 TB",
-            "requests_served": 150000
-        }
+        # Get purge history from database
+        try:
+            from ..services.supabase_client import get_supabase
+            supabase = get_supabase()
+            
+            # Count total purges
+            response = supabase.table("cdn_purge_history").select("*", count="exact").execute()
+            total_purges = response.count if response.count else 0
+            
+            # Get recent purges
+            recent = supabase.table("cdn_purge_history").select("*").order("purged_at", desc=True).limit(10).execute()
+            
+            return {
+                "enabled": True,
+                "provider": self.cdn_provider,
+                "total_purges": total_purges,
+                "recent_purges": recent.data or [],
+                "note": "For detailed CDN stats, check your CDN provider dashboard"
+            }
+        except Exception as e:
+            logger.error(f"Failed to get CDN stats: {e}")
+            return {
+                "enabled": True,
+                "provider": self.cdn_provider,
+                "error": str(e)
+            }
     
     def get_health(self) -> Dict[str, Any]:
         """Health check for CDN manager"""

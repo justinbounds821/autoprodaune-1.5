@@ -99,10 +99,11 @@ class WebhookNotifierService:
         url: str, 
         payload: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Send webhook with retry logic"""
+        """Send webhook with retry logic and logging to database"""
         import httpx
         import hashlib
         import hmac
+        from ..services.supabase_client import get_supabase
         
         # Add signature if secret configured
         headers = {"Content-Type": "application/json"}
@@ -114,6 +115,7 @@ class WebhookNotifierService:
             ).hexdigest()
             headers["X-Webhook-Signature"] = signature
         
+        log_id = None
         for attempt in range(1, self.max_retries + 1):
             try:
                 async with httpx.AsyncClient() as client:
@@ -124,8 +126,31 @@ class WebhookNotifierService:
                         timeout=self.timeout
                     )
                     
+                    # Log to database
+                    try:
+                        supabase = get_supabase()
+                        log_data = {
+                            "job_id": payload.get("job_id"),
+                            "event": payload.get("event"),
+                            "url": url,
+                            "payload": payload,
+                            "response_status": response.status_code,
+                            "response_body": response.text[:500],  # Truncate
+                            "attempts": attempt,
+                            "delivered": response.status_code in (200, 201, 202, 204)
+                        }
+                        
+                        if log_id:
+                            supabase.table("webhook_logs").update(log_data).eq("id", log_id).execute()
+                        else:
+                            result = supabase.table("webhook_logs").insert(log_data).execute()
+                            if result.data:
+                                log_id = result.data[0]["id"]
+                    except Exception as log_error:
+                        logger.error(f"Failed to log webhook: {log_error}")
+                    
                     if response.status_code in (200, 201, 202, 204):
-                        logger.info(f"Webhook sent successfully: {payload['event']} (job={payload['job_id']})")
+                        logger.info(f"Webhook sent successfully: {payload['event']} (job={payload.get('job_id')})")
                         return {
                             "sent": True,
                             "status_code": response.status_code,
@@ -158,20 +183,23 @@ class WebhookNotifierService:
         job_id: Optional[str] = None,
         limit: int = 20
     ) -> List[Dict[str, Any]]:
-        """Get webhook delivery logs"""
-        # TODO: Store webhook logs in database
-        # For now, return mock data
-        return [
-            {
-                "id": f"wh_{i}",
-                "job_id": job_id or f"job_{i}",
-                "event": "job.completed",
-                "sent_at": datetime.utcnow().isoformat(),
-                "status": "delivered",
-                "attempts": 1
-            }
-            for i in range(min(3, limit))
-        ]
+        """Get webhook delivery logs from database"""
+        try:
+            from ..services.supabase_client import get_supabase
+            supabase = get_supabase()
+            
+            query = supabase.table("webhook_logs").select("*")
+            
+            if job_id:
+                query = query.eq("job_id", job_id)
+            
+            response = query.order("sent_at", desc=True).limit(limit).execute()
+            
+            return response.data or []
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch webhook logs: {e}")
+            return []
     
     def get_health(self) -> Dict[str, Any]:
         """Health check for webhook service"""

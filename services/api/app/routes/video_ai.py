@@ -43,34 +43,55 @@ async def get_video_insights(job_id: str):
     Includes tags, sentiment, scene cuts, captions, embeddings.
     """
     try:
-        # Get services
-        tagging = get_tagging_service()
-        scene_detector = get_scene_detector()
-        vector_store = get_vector_store()
+        from ..services.supabase_client import get_supabase
+        supabase = get_supabase()
+        
+        # Fetch insights from database
+        response = supabase.table("video_insights").select("*").eq("job_id", job_id).execute()
+        
+        if not response.data:
+            # If no insights yet, return empty structure
+            return {
+                "job_id": job_id,
+                "tags": [],
+                "sentiment": "neutral",
+                "sentiment_score": 0.0,
+                "entities": [],
+                "scene_cuts": [],
+                "captions": {
+                    "available": False,
+                    "formats": []
+                },
+                "vector_embedding": {
+                    "available": False,
+                    "dimension": 0
+                },
+                "message": "No insights processed yet. Run POST /api/video/ai/process/{job_id} to generate."
+            }
+        
+        insight = response.data[0]
         whisper = get_whisper_service()
-        
-        # TODO: Fetch job from database
-        # For now, return mock structure showing what would be returned
-        
-        # Generate mock insights
-        content_text = f"Sample video content for job {job_id}"
-        tags_data = await tagging.analyze_content(content_text, title=f"Video {job_id}")
+        vector_store = get_vector_store()
         
         return {
             "job_id": job_id,
-            "tags": tags_data.get("tags", []),
-            "sentiment": tags_data.get("sentiment", "neutral"),
-            "sentiment_score": tags_data.get("sentiment_score", 0.0),
-            "entities": tags_data.get("entities", []),
-            "scene_cuts": [],  # Would be populated after processing
+            "tags": insight.get("tags", []),
+            "sentiment": insight.get("sentiment", "neutral"),
+            "sentiment_score": insight.get("sentiment_score", 0.0),
+            "entities": insight.get("entities", []),
+            "scene_cuts": insight.get("scene_cuts", []),
             "captions": {
-                "available": whisper.enabled,
-                "formats": ["srt", "ass"] if whisper.enabled else []
+                "available": bool(insight.get("captions_srt_path")),
+                "formats": ["srt", "ass"] if insight.get("captions_srt_path") else [],
+                "srt_path": insight.get("captions_srt_path"),
+                "ass_path": insight.get("captions_ass_path")
             },
             "vector_embedding": {
-                "available": vector_store.enabled,
-                "dimension": vector_store.dimension if vector_store.enabled else 0
-            }
+                "available": bool(insight.get("vector_embedding")),
+                "dimension": len(insight.get("vector_embedding", [])) if insight.get("vector_embedding") else 0
+            },
+            "audio_quality_score": insight.get("audio_quality_score"),
+            "processed_at": insight.get("processed_at")
         }
     
     except Exception as e:
@@ -119,15 +140,26 @@ async def process_ai_features(job_id: str):
     - Generate captions
     """
     try:
+        from ..services.supabase_client import get_supabase
+        supabase = get_supabase()
+        
+        # Get job from database to get video path and metadata
+        job_response = supabase.table("video_jobs").select("*").eq("id", job_id).execute()
+        
+        if not job_response.data:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        
+        job = job_response.data[0]
+        video_path = job.get("output_url") or job.get("video_url")
+        
+        if not video_path:
+            raise HTTPException(status_code=400, detail="Job has no video output yet")
+        
         # Get services
         vector_store = get_vector_store()
         tagging = get_tagging_service()
         scene_detector = get_scene_detector()
         whisper = get_whisper_service()
-        cost_tracker = get_cost_tracker()
-        
-        # TODO: Get video path from database
-        video_path = f"/path/to/video/{job_id}.mp4"
         
         results = {
             "job_id": job_id,
@@ -135,42 +167,56 @@ async def process_ai_features(job_id: str):
             "errors": []
         }
         
+        insight_data = {}
+        
         # 1. Generate tags and sentiment
         if tagging.enabled:
             try:
-                tags_result = await tagging.analyze_content("Sample content", title=f"Job {job_id}")
+                content = job.get("input_text", "") or job.get("script", "")
+                tags_result = await tagging.analyze_content(content, title=job.get("title"))
                 results["processed_features"].append("tagging")
-                results["tags"] = tags_result
+                insight_data["tags"] = tags_result.get("tags", [])
+                insight_data["sentiment"] = tags_result.get("sentiment")
+                insight_data["sentiment_score"] = tags_result.get("sentiment_score", 0.0)
+                insight_data["entities"] = tags_result.get("entities", [])
             except Exception as e:
                 results["errors"].append(f"Tagging failed: {str(e)}")
         
-        # 2. Detect scenes
-        if scene_detector.enabled:
+        # 2. Detect scenes (only if local video file)
+        if scene_detector.enabled and video_path.startswith("/") or video_path.startswith("./"):
             try:
                 scenes = await scene_detector.detect_scenes(video_path)
                 results["processed_features"].append("scene_detection")
-                results["scenes"] = len(scenes)
+                insight_data["scene_cuts"] = scenes
             except Exception as e:
                 results["errors"].append(f"Scene detection failed: {str(e)}")
         
-        # 3. Generate captions
-        if whisper.enabled:
+        # 3. Generate captions (only if local video file)
+        if whisper.enabled and (video_path.startswith("/") or video_path.startswith("./")):
             try:
                 captions = await whisper.generate_captions(video_path)
                 if captions:
                     results["processed_features"].append("captions")
-                    results["captions"] = captions
+                    insight_data["captions_srt_path"] = captions.get("srt_path")
+                    insight_data["captions_ass_path"] = captions.get("ass_path")
             except Exception as e:
                 results["errors"].append(f"Caption generation failed: {str(e)}")
         
         # 4. Generate vector embedding
         if vector_store.enabled:
             try:
-                embedding = vector_store.generate_embedding(f"Content for {job_id}")
+                content = job.get("input_text", "") or job.get("script", "")
+                embedding = vector_store.generate_embedding(content)
                 results["processed_features"].append("vector_embedding")
-                results["embedding_dim"] = len(embedding) if embedding else 0
+                insight_data["vector_embedding"] = embedding
             except Exception as e:
                 results["errors"].append(f"Embedding generation failed: {str(e)}")
+        
+        # Store insights in database
+        if insight_data:
+            insight_data["job_id"] = job_id
+            supabase.table("video_insights").upsert(insight_data).execute()
+            results["insights_saved"] = True
         
         return results
     
@@ -183,20 +229,38 @@ async def process_ai_features(job_id: str):
 async def get_captions(job_id: str, format: str = Query("srt", regex="^(srt|ass)$")):
     """Download caption file for video"""
     try:
+        from ..services.supabase_client import get_supabase
+        from fastapi.responses import FileResponse
+        import os
+        
         whisper = get_whisper_service()
         
         if not whisper.enabled:
             raise HTTPException(status_code=503, detail="Caption service not available")
         
-        # TODO: Retrieve caption file path from storage
-        caption_path = f"/path/to/captions/{job_id}.{format}"
+        supabase = get_supabase()
         
-        return {
-            "job_id": job_id,
-            "format": format,
-            "download_url": caption_path,
-            "message": "Caption file ready"
-        }
+        # Get caption path from insights
+        response = supabase.table("video_insights").select("*").eq("job_id", job_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="No insights found for this job")
+        
+        insight = response.data[0]
+        caption_path = insight.get(f"captions_{format}_path")
+        
+        if not caption_path:
+            raise HTTPException(status_code=404, detail=f"No {format.upper()} captions available for this job")
+        
+        if not os.path.exists(caption_path):
+            raise HTTPException(status_code=404, detail="Caption file not found on disk")
+        
+        # Return file download
+        return FileResponse(
+            caption_path,
+            media_type="text/plain",
+            filename=f"{job_id}.{format}"
+        )
     
     except HTTPException:
         raise
