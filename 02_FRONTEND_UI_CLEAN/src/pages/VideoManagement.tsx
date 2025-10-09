@@ -358,27 +358,24 @@ const VideoManagement: React.FC = () => {
 
   const handleDeleteVideo = async (id: string) => {
     try {
-      // Call delete API
-      const response = await fetch(`/api/video/${id}`, {
-        method: 'DELETE',
-      });
+      // Use the new autoproApi method
+      const response = await AutoProApiService.deleteVideoJob(id);
 
-      if (response.ok) {
+      if (response.success) {
         setVideos(prev => prev.filter(v => v.id !== id));
         toast({
           title: "✅ Video șters",
-          description: "Video-ul a fost șters cu succes din sistem!",
+          description: response.message || "Video-ul a fost șters cu succes din sistem!",
         });
       } else {
-        throw new Error('Delete failed');
+        throw new Error(response.error || 'Delete failed');
       }
     } catch (error) {
       console.error('Failed to delete video:', error);
-      // Still remove from UI even if API fails
-      setVideos(prev => prev.filter(v => v.id !== id));
       toast({
-        title: "Video șters local",
-        description: "Video-ul a fost eliminat din listă.",
+        title: "Eroare",
+        description: "Nu s-a putut șterge video-ul.",
+        variant: "destructive",
       });
     }
   };

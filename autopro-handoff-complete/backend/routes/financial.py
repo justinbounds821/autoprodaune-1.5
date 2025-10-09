@@ -8,6 +8,7 @@ Acest modul implementează endpoint-urile REST pentru:
 - Dashboard financiar
 """
 
+import os
 import logging
 from datetime import datetime, date, timedelta
 from decimal import Decimal
@@ -704,6 +705,31 @@ async def get_financial_dashboard(
         
     except Exception as e:
         logging.error(f"Eroare la obținerea datelor dashboard: {e}")
+        
+        # FAKE_MODE fallback - return mock data for development
+        fake_mode = os.getenv('FAKE_MODE', 'false').lower() == 'true'
+        if fake_mode:
+            logging.info("FAKE_MODE active - returning mock financial data")
+            return {
+                "period": period if not date_from else "custom",
+                "start_date": date_from or (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
+                "end_date": date_to or datetime.now().strftime("%Y-%m-%d"),
+                "total_costs": 1250.50,
+                "total_revenue": 3500.00,
+                "net_profit": 2249.50,
+                "roi_percentage": 180.0,
+                "cost_breakdown": {"api_costs": 1250.50},
+                "revenue_breakdown": {"all": 3500.00},
+                "cost_change_percentage": 15.5,
+                "revenue_change_percentage": 25.3,
+                "profit_change_percentage": 30.2,
+                "roi_change_percentage": 12.7,
+                "recommendations": [
+                    "ROI excelent: scalați investițiile care performează.",
+                    "Veniturile cresc constant - continuați strategia actuală."
+                ]
+            }
+        
         raise HTTPException(status_code=500, detail=f"Eroare la dashboard: {str(e)}")
 
 
@@ -842,10 +868,44 @@ async def get_credit_balance(
         
         return result
         
-    except HTTPException:
+    except HTTPException as he:
+        # FAKE_MODE fallback for missing credit balances
+        fake_mode = os.getenv('FAKE_MODE', 'false').lower() == 'true'
+        if fake_mode and he.status_code == 404:
+            logging.info(f"FAKE_MODE active - returning mock credit balance for {provider}")
+            
+            # Mock credit balances per provider
+            mock_balances = {
+                "tiktok": {"provider": "tiktok", "current_balance": 500.00, "total_allocated": 1000.00, "credit_type": "usd", "last_updated": datetime.now().isoformat()},
+                "youtube": {"provider": "youtube", "current_balance": 750.00, "total_allocated": 1000.00, "credit_type": "usd", "last_updated": datetime.now().isoformat()},
+                "openai": {"provider": "openai", "current_balance": 125.50, "total_allocated": 200.00, "credit_type": "usd", "last_updated": datetime.now().isoformat()},
+                "elevenlabs": {"provider": "elevenlabs", "current_balance": 85.25, "total_allocated": 100.00, "credit_type": "usd", "last_updated": datetime.now().isoformat()},
+                "heygen": {"provider": "heygen", "current_balance": 300.00, "total_allocated": 500.00, "credit_type": "credits", "last_updated": datetime.now().isoformat()},
+            }
+            
+            return mock_balances.get(provider.lower(), {
+                "provider": provider,
+                "current_balance": 100.00,
+                "total_allocated": 100.00,
+                "credit_type": "credits",
+                "last_updated": datetime.now().isoformat()
+            })
         raise
     except Exception as e:
         logging.error(f"Eroare la obținerea balanței de credite: {e}")
+        
+        # FAKE_MODE fallback on any error
+        fake_mode = os.getenv('FAKE_MODE', 'false').lower() == 'true'
+        if fake_mode:
+            logging.info(f"FAKE_MODE active - returning mock credit balance for {provider} (error fallback)")
+            return {
+                "provider": provider,
+                "current_balance": 100.00,
+                "total_allocated": 100.00,
+                "credit_type": "credits",
+                "last_updated": datetime.now().isoformat()
+            }
+        
         raise HTTPException(status_code=500, detail=f"Eroare la balanța de credite: {str(e)}")
 
 
