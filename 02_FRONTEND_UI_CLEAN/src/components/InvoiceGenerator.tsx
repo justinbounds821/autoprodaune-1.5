@@ -79,6 +79,7 @@ export default function InvoiceGenerator() {
 
   useEffect(() => {
     loadInvoices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadInvoices = async () => {
@@ -130,7 +131,7 @@ export default function InvoiceGenerator() {
     setItems(prev => [...prev, newItem]);
   };
 
-  const updateItem = (id: string, field: keyof InvoiceItem, value: any) => {
+  const updateItem = (id: string, field: keyof InvoiceItem, value: string | number) => {
     setItems(prev => prev.map(item => {
       if (item.id === id) {
         const updated = { ...item, [field]: value };

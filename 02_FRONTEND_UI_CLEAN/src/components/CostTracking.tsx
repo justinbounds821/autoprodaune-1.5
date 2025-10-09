@@ -94,10 +94,12 @@ export default function CostTracking() {
 
   useEffect(() => {
     loadCosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     calculateCategorySummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [costs]);
 
   const loadCosts = async () => {

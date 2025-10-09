@@ -53,7 +53,7 @@ interface AutomationRule {
   };
   actions: Array<{
     type: 'send_email' | 'send_sms' | 'update_lead_status' | 'create_task' | 'send_notification';
-    parameters: Record<string, any>;
+    parameters: Record<string, string | number | boolean>;
   }>;
   last_executed: string | null;
   execution_count: number;
@@ -157,6 +157,7 @@ export default function AutomationRulesEditor() {
 
   useEffect(() => {
     loadAutomationRules();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAutomationRules = async () => {
@@ -302,7 +303,7 @@ export default function AutomationRulesEditor() {
     }));
   };
 
-  const updateAction = (index: number, field: string, value: any) => {
+  const updateAction = (index: number, field: string, value: string | number | boolean) => {
     setFormData(prev => ({
       ...prev,
       actions: prev.actions.map((action, i) => 

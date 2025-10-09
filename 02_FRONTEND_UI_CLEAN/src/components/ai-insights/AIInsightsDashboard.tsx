@@ -42,7 +42,7 @@ export default function AIInsightsDashboard() {
     viewModel.loadInsights();
   };
 
-  const handleGenerateInsight = (type: any, category: any) => {
+  const handleGenerateInsight = (type: string, category: string) => {
     viewModel.generateInsight(type, category);
     toast({
       title: "Insight generat",
@@ -50,11 +50,11 @@ export default function AIInsightsDashboard() {
     });
   };
 
-  const handleSetCategory = (category: any) => {
+  const handleSetCategory = (category: string) => {
     viewModel.setCategory(category);
   };
 
-  const handleSetType = (type: any) => {
+  const handleSetType = (type: string) => {
     viewModel.setType(type);
   };
 

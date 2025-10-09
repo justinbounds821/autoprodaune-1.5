@@ -79,6 +79,7 @@ export default function AdvancedAnalytics() {
 
   useEffect(() => {
     loadAnalyticsData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRange]);
 
   const loadAnalyticsData = async () => {
