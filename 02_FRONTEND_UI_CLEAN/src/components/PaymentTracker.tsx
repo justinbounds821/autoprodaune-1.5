@@ -113,6 +113,7 @@ export default function PaymentTracker() {
   useEffect(() => {
     loadPayments();
     loadOverview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
   const loadPayments = async () => {

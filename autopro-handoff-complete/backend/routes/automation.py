@@ -14,6 +14,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import logging
 import asyncio
+import os
 
 from ..services.supabase_client import get_supabase_service_instance
 from ..services.social_poster import SocialPoster
@@ -389,3 +390,146 @@ async def _optimize_whatsapp_automation():
 
     except Exception as e:
         logging.error(f"Error in WhatsApp optimization: {e}")
+
+@router.get("/logs")
+async def get_automation_logs(
+    limit: int = Query(100, ge=1, le=500, description="Number of log entries to return"),
+    task_type: Optional[str] = Query(None, description="Filter by task type"),
+    status: Optional[str] = Query(None, description="Filter by status (success, failed, pending)"),
+    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)")
+) -> Dict[str, Any]:
+    """
+    Get automation execution logs with filtering and pagination.
+    
+    Args:
+        limit: Maximum number of logs to return (1-500)
+        task_type: Filter by task type (video_generation, social_posting, etc.)
+        status: Filter by execution status
+        date_from: Filter logs from this date
+        date_to: Filter logs up to this date
+    
+    Returns:
+        Dictionary with logs and metadata
+    """
+    try:
+        # Check for FAKE_MODE
+        fake_mode = os.getenv('FAKE_MODE', 'false').lower() == 'true'
+        
+        if fake_mode:
+            # Return mock logs for development
+            mock_logs = [
+                {
+                    "id": "log_1",
+                    "timestamp": datetime.now().isoformat(),
+                    "task_type": "video_generation",
+                    "status": "success",
+                    "message": "Generated 3 videos successfully",
+                    "metadata": {"videos_created": 3, "duration": "2m 34s"}
+                },
+                {
+                    "id": "log_2",
+                    "timestamp": (datetime.now() - timedelta(hours=6)).isoformat(),
+                    "task_type": "social_posting",
+                    "status": "success",
+                    "message": "Posted to TikTok and Facebook",
+                    "metadata": {"platforms": ["tiktok", "facebook"], "posts": 2}
+                },
+                {
+                    "id": "log_3",
+                    "timestamp": (datetime.now() - timedelta(hours=12)).isoformat(),
+                    "task_type": "whatsapp_automation",
+                    "status": "success",
+                    "message": "Processed 15 WhatsApp conversations",
+                    "metadata": {"conversations": 15, "leads": 3}
+                },
+                {
+                    "id": "log_4",
+                    "timestamp": (datetime.now() - timedelta(days=1)).isoformat(),
+                    "task_type": "video_generation",
+                    "status": "failed",
+                    "message": "Video generation failed: API key expired",
+                    "metadata": {"error": "Invalid API key"}
+                },
+                {
+                    "id": "log_5",
+                    "timestamp": (datetime.now() - timedelta(days=1, hours=6)).isoformat(),
+                    "task_type": "referral_tracking",
+                    "status": "success",
+                    "message": "Updated 8 referral rewards",
+                    "metadata": {"referrals_updated": 8, "total_rewards": 400.00}
+                }
+            ]
+            
+            # Apply filters to mock data
+            filtered_logs = mock_logs
+            if task_type:
+                filtered_logs = [log for log in filtered_logs if log["task_type"] == task_type]
+            if status:
+                filtered_logs = [log for log in filtered_logs if log["status"] == status]
+            
+            filtered_logs = filtered_logs[:limit]
+            
+            return {
+                "success": True,
+                "logs": filtered_logs,
+                "count": len(filtered_logs),
+                "total": len(mock_logs),
+                "filters": {
+                    "task_type": task_type,
+                    "status": status,
+                    "date_from": date_from,
+                    "date_to": date_to,
+                    "limit": limit
+                }
+            }
+        
+        # Real implementation with Supabase
+        supabase_service = get_supabase_service_instance()
+        
+        # Build query filters
+        query = supabase_service.client.table("automation_logs").select("*")
+        
+        if task_type:
+            query = query.eq("task_type", task_type)
+        
+        if status:
+            query = query.eq("status", status)
+        
+        if date_from:
+            query = query.gte("created_at", f"{date_from}T00:00:00Z")
+        
+        if date_to:
+            query = query.lte("created_at", f"{date_to}T23:59:59Z")
+        
+        # Execute query with limit
+        result = query.order("created_at", desc=True).limit(limit).execute()
+        
+        return {
+            "success": True,
+            "logs": result.data,
+            "count": len(result.data),
+            "filters": {
+                "task_type": task_type,
+                "status": status,
+                "date_from": date_from,
+                "date_to": date_to,
+                "limit": limit
+            }
+        }
+        
+    except Exception as e:
+        logging.error(f"Error getting automation logs: {e}")
+        
+        # Fallback to mock data on error
+        fake_mode = os.getenv('FAKE_MODE', 'false').lower() == 'true'
+        if fake_mode:
+            return {
+                "success": True,
+                "logs": [],
+                "count": 0,
+                "message": "No logs available (FAKE_MODE)",
+                "error": str(e)
+            }
+        
+        raise HTTPException(status_code=500, detail=f"Error retrieving logs: {str(e)}")

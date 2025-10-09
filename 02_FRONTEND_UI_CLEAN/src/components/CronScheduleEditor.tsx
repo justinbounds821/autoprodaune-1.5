@@ -108,6 +108,7 @@ export default function CronScheduleEditor() {
 
   useEffect(() => {
     loadCronJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadCronJobs = async () => {

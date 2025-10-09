@@ -26,9 +26,10 @@ function HealthPing() {
     (async () => {
       try {
         await api.healthCheck();
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const error = e as Error;
         toast.error("Backend indisponibil", {
-          description: `Verifică http://127.0.0.1:8000/health • ${e?.message ?? ""}`,
+          description: `Verifică http://127.0.0.1:8000/health • ${error?.message ?? ""}`,
         });
       }
     })();

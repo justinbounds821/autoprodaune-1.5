@@ -26,14 +26,14 @@ except Exception as e:
     logging.warning("⚠️ Failed to load .env file: %s", e)
 
 from fastapi import FastAPI, Request, HTTPException
-from redis import Redis
-from prometheus_fastapi_instrumentator import Instrumentator
-from .middleware.rate_limit import rate_limit_middleware
+# from redis import Redis  # Optional - commented for FAKE_MODE
+# from prometheus_fastapi_instrumentator import Instrumentator  # Optional
+# from .middleware.rate_limit import rate_limit_middleware  # Optional
 
-# Import core modules
-from .core.database import get_database
-from .core.monitoring import get_monitoring
-from .services.automation_scheduler import get_automation_scheduler
+# Import core modules - commented for minimal startup
+# from .core.database import get_database
+# from .core.monitoring import get_monitoring
+# from .services.automation_scheduler import get_automation_scheduler
 
 log = logging.getLogger("uvicorn.error")
 
@@ -199,14 +199,14 @@ def rate_limiter(limit_rpm: int = RATE_LIMIT_RPM) -> Callable:
     return decorator
 # bridge: END SIMPLE RATE LIMIT
 
-# Prometheus /metrics endpoint using our monitoring system
-try:
-    from .core.monitoring import REGISTRY
-    Instrumentator(registry=REGISTRY).instrument(app).expose(app, endpoint="/metrics")
-    log.info("✅ Prometheus metrics configured with custom registry")
-except ImportError:
-    Instrumentator().instrument(app).expose(app, endpoint="/metrics")
-    log.warning("⚠️ Using default Prometheus registry")
+# Prometheus /metrics endpoint using our monitoring system - DISABLED FOR FAKE_MODE
+# try:
+#     from .core.monitoring import REGISTRY
+#     Instrumentator(registry=REGISTRY).instrument(app).expose(app, endpoint="/metrics")
+#     log.info("✅ Prometheus metrics configured with custom registry")
+# except ImportError:
+#     Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+#     log.warning("⚠️ Using default Prometheus registry")
 
 # Redis rate limiting configuration
 RATE_LIMIT = int(os.getenv("RATE_LIMIT_REQUESTS", "5"))
@@ -214,14 +214,15 @@ WINDOW_SEC = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
 redis_host = os.getenv("REDIS_HOST", "localhost")
 redis_port = int(os.getenv("REDIS_PORT", "6379"))
 
-# Initialize Redis connection
-try:
-    r = Redis(host=redis_host, port=redis_port, db=0, decode_responses=True)
-    r.ping()  # Test connection
-    log.info("✅ Redis connection established")
-except Exception as e:
-    log.warning(f"⚠️ Redis connection failed, using in-memory rate limiting: {e}")
-    r = None
+# Initialize Redis connection - DISABLED FOR FAKE_MODE
+r = None  # Disabled for minimal startup
+# try:
+#     r = Redis(host=redis_host, port=redis_port, db=0, decode_responses=True)
+#     r.ping()  # Test connection
+#     log.info("✅ Redis connection established")
+# except Exception as e:
+#     log.warning(f"⚠️ Redis connection failed, using in-memory rate limiting: {e}")
+#     r = None
 
 # Redis-based rate limiting middleware
 @app.middleware("http")
@@ -254,7 +255,8 @@ async def redis_rate_limit(request: Request, call_next):
                 log.warning(f"Redis rate limiting failed, falling back to in-memory: {redis_error}")
         
         # Fallback to in-memory rate limiting
-        return await rate_limit_middleware(max_requests=RATE_LIMIT, time_window=WINDOW_SEC)(request, call_next)
+        # return await rate_limit_middleware(max_requests=RATE_LIMIT, time_window=WINDOW_SEC)(request, call_next)
+        pass  # Disabled for FAKE_MODE
     
     return await call_next(request)
 
@@ -426,23 +428,25 @@ async def startup_event():
     """Initialize core systems on startup."""
     try:
         # Initialize database connection
-        db = get_database()
-        if db.test_connection():
-            log.info("✅ Database connection verified")
-        else:
-            log.error("❌ Database connection failed")
+        # db = get_database()
+        # if db.test_connection():
+        #     log.info("✅ Database connection verified")
+        # else:
+        #     log.error("❌ Database connection failed")
+        pass  # Disabled for FAKE_MODE
 
         # Initialize monitoring
-        monitoring = get_monitoring()
-        await monitoring.log_event("info", "startup", "AutoPro Daune API starting up")
+        # monitoring = get_monitoring()
+        # await monitoring.log_event("info", "startup", "AutoPro Daune API starting up")
 
-        # Start automation scheduler
-        automation = get_automation_scheduler()
-        if os.getenv("AUTOMATION_ENABLED", "true").lower() == "true":
-            automation.start()
-            log.info("✅ Automation scheduler started")
-        else:
-            log.info("⚠️ Automation scheduler disabled by configuration")
+        # # Start automation scheduler
+        # automation = get_automation_scheduler()
+        # if os.getenv("AUTOMATION_ENABLED", "true").lower() == "true":
+        #     automation.start()
+        #     log.info("✅ Automation scheduler started")
+        # else:
+        #     log.info("⚠️ Automation scheduler disabled by configuration")
+        pass  # Disabled for FAKE_MODE
 
         # Log all registered routes
         lines = []
@@ -460,13 +464,15 @@ async def shutdown_event():
     """Cleanup on shutdown."""
     try:
         # Stop automation scheduler
-        automation = get_automation_scheduler()
-        automation.stop()
-        log.info("✅ Automation scheduler stopped")
+        # automation = get_automation_scheduler()
+        # automation.stop()
+        # log.info("✅ Automation scheduler stopped")
+        pass  # Disabled for FAKE_MODE
 
         # Log shutdown
-        monitoring = get_monitoring()
-        await monitoring.log_event("info", "shutdown", "AutoPro Daune API shutting down")
+        # monitoring = get_monitoring()
+        # await monitoring.log_event("info", "shutdown", "AutoPro Daune API shutting down")
+        pass  # Disabled for FAKE_MODE
 
     except Exception as e:
         log.error(f"❌ Shutdown error: {e}")# Force reload

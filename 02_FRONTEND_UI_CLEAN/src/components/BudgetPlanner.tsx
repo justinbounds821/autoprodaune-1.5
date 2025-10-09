@@ -103,6 +103,7 @@ export default function BudgetPlanner() {
 
   useEffect(() => {
     loadBudgetPlans();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadBudgetPlans = async () => {
@@ -194,7 +195,7 @@ export default function BudgetPlanner() {
     setCategories(prev => [...prev, newCategory]);
   };
 
-  const updateCategory = (index: number, field: keyof BudgetCategory, value: any) => {
+  const updateCategory = (index: number, field: keyof BudgetCategory, value: string | number) => {
     setCategories(prev => prev.map((cat, i) => 
       i === index ? { ...cat, [field]: value } : cat
     ));

@@ -22,6 +22,7 @@ export default function PostScheduleCalendar({ posts }: PostScheduleCalendarProp
 
   useEffect(() => {
     generateCalendar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMonth]);
 
   const generateCalendar = () => {

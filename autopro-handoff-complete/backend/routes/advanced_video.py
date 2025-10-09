@@ -419,12 +419,40 @@ async def get_video_preview(filename: str):
     return {"preview_path": str(preview_path), "exists": True}
 
 @router.get("/list-generated")
-async def list_generated_videos():
-    """List all generated advanced videos and previews."""
+async def list_generated_videos(
+    page: int = 1,
+    limit: int = 20,
+    status: Optional[str] = None,
+    sort_by: str = "created",
+    sort_order: str = "desc"
+):
+    """
+    List all generated advanced videos and previews with pagination.
+    
+    Args:
+        page: Page number (1-indexed)
+        limit: Items per page (default: 20, max: 100)
+        status: Filter by status (optional)
+        sort_by: Sort field (created, filename, size)
+        sort_order: Sort order (asc, desc)
+    """
     output_dir = Path(os.getcwd()) / "generated_videos" / "advanced"
 
     if not output_dir.exists():
-        return {"videos": [], "count": 0, "message": "No advanced videos generated yet"}
+        return {
+            "success": True,
+            "videos": [],
+            "count": 0,
+            "total": 0,
+            "page": page,
+            "limit": limit,
+            "pages": 0,
+            "message": "No advanced videos generated yet"
+        }
+
+    # Validate and limit pagination
+    page = max(1, page)
+    limit = min(max(1, limit), 100)
 
     videos = []
     png_files = {}
@@ -452,34 +480,109 @@ async def list_generated_videos():
             except:
                 pass
 
-        # Generate base64 from PNG
-        preview_base64 = ""
-        try:
-            with open(png_path, 'rb') as f:
-                preview_base64 = base64.b64encode(f.read()).decode('utf-8')
-        except:
-            pass
-
+        # Generate base64 from PNG (only for current page to save memory)
         stat = png_path.stat()
-        videos.append({
+        
+        video_data = {
             "filename": png_path.name,
             "type": "preview",
             "size": stat.st_size,
             "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
             "path": str(png_path),
             "preview_path": str(png_path),
-            "preview_base64": preview_base64,
-            "config": config
-        })
+            "config": config,
+            "status": config.get("status", "completed")
+        }
+        
+        # Apply status filter if provided
+        if status is None or video_data["status"] == status:
+            videos.append(video_data)
 
-    videos.sort(key=lambda x: x['created'], reverse=True)
+    # Sort videos
+    sort_key_map = {
+        "created": lambda x: x["created"],
+        "filename": lambda x: x["filename"],
+        "size": lambda x: x["size"]
+    }
+    
+    if sort_by in sort_key_map:
+        videos.sort(key=sort_key_map[sort_by], reverse=(sort_order == "desc"))
+
+    # Calculate pagination
+    total = len(videos)
+    total_pages = (total + limit - 1) // limit
+    start_idx = (page - 1) * limit
+    end_idx = min(start_idx + limit, total)
+    
+    # Get page videos and add base64 preview
+    page_videos = videos[start_idx:end_idx]
+    for video in page_videos:
+        try:
+            with open(video["preview_path"], 'rb') as f:
+                video["preview_base64"] = base64.b64encode(f.read()).decode('utf-8')
+        except:
+            video["preview_base64"] = ""
 
     return {
         "success": True,
-        "videos": videos,
-        "count": len(videos),
-        "message": f"Found {len(videos)} advanced video files"
+        "videos": page_videos,
+        "count": len(page_videos),
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": total_pages,
+        "has_next": page < total_pages,
+        "has_prev": page > 1,
+        "message": f"Found {total} advanced video files (showing {len(page_videos)})"
     }
+
+@router.delete("/delete/{filename}")
+async def delete_generated_video(filename: str):
+    """Delete a generated advanced video and its config file."""
+    try:
+        output_dir = Path(os.getcwd()) / "generated_videos" / "advanced"
+        
+        if not output_dir.exists():
+            raise HTTPException(status_code=404, detail="Video directory not found")
+        
+        # Remove file extension if provided
+        base_name = filename.replace('.png', '').replace('.json', '')
+        
+        # Find and delete related files
+        deleted_files = []
+        
+        # Delete PNG file
+        png_path = output_dir / f"{base_name}.png"
+        if png_path.exists():
+            png_path.unlink()
+            deleted_files.append(str(png_path.name))
+        
+        # Delete config file
+        config_path = output_dir / f"{base_name}_config.json"
+        if config_path.exists():
+            config_path.unlink()
+            deleted_files.append(str(config_path.name))
+        
+        # Delete video file if exists
+        video_path = output_dir / f"{base_name}.mp4"
+        if video_path.exists():
+            video_path.unlink()
+            deleted_files.append(str(video_path.name))
+        
+        if not deleted_files:
+            raise HTTPException(status_code=404, detail=f"Video files not found for: {base_name}")
+        
+        return {
+            "success": True,
+            "message": f"Successfully deleted {len(deleted_files)} file(s)",
+            "deleted_files": deleted_files
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting video {filename}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error deleting video: {str(e)}")
 
 @router.get("/capabilities")
 async def get_advanced_capabilities():

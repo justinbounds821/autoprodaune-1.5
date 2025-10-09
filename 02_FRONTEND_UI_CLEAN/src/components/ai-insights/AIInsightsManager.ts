@@ -12,7 +12,7 @@ export interface InsightData {
   confidence: number;
   impact: 'low' | 'medium' | 'high' | 'critical';
   category: 'leads' | 'financial' | 'social' | 'operations';
-  data: Record<string, any>;
+  data: Record<string, string | number | boolean>;
   created_at: string;
 }
 
@@ -172,7 +172,7 @@ export class AIInsightsManager {
     return impactMap[type];
   }
 
-  private generateInsightData(type: InsightData['type'], category: InsightData['category']): Record<string, any> {
+  private generateInsightData(type: InsightData['type'], category: InsightData['category']): Record<string, string> {
     return {
       type,
       category,
