@@ -699,6 +699,38 @@ async def get_financial_dashboard(
     Returns:
         Dicționar cu datele dashboard-ului
     """
+    import os
+    FAKE_MODE = os.getenv("FAKE_MODE", "false").lower() == "true"
+    
+    if FAKE_MODE:
+        # Return mock data for development/testing
+        return {
+            "success": True,
+            "period": period,
+            "data": {
+                "total_costs": 125.50,
+                "total_revenue": 450.00,
+                "roi": 2.58,
+                "net_profit": 324.50,
+                "videos_generated": 23,
+                "api_calls": 145,
+                "cost_breakdown": {
+                    "heygen": 85.00,
+                    "elevenlabs": 25.50,
+                    "tiktok": 15.00
+                },
+                "revenue_breakdown": {
+                    "subscriptions": 300.00,
+                    "one_time": 150.00
+                },
+                "metrics": {
+                    "avg_cost_per_video": 5.46,
+                    "avg_revenue_per_video": 19.57,
+                    "profit_margin": 0.72
+                }
+            }
+        }
+    
     try:
         return ft.dashboard(date_from=date_from, date_to=date_to, period=period)
         
@@ -834,6 +866,26 @@ async def get_credit_balance(
     Returns:
         Obiect CreditBalance cu balanța
     """
+    import os
+    FAKE_MODE = os.getenv("FAKE_MODE", "false").lower() == "true"
+    
+    if FAKE_MODE:
+        # Return mock credit balance for development/testing
+        fake_balances = {
+            "tiktok": {"balance": 150.00, "currency": "USD"},
+            "heygen": {"balance": 200.00, "currency": "USD"},
+            "elevenlabs": {"balance": 75.00, "currency": "USD"}
+        }
+        
+        balance_data = fake_balances.get(provider.lower(), {"balance": 0, "currency": "USD"})
+        
+        return {
+            "provider": provider,
+            "balance": balance_data["balance"],
+            "currency": balance_data["currency"],
+            "last_updated": datetime.now().isoformat()
+        }
+    
     try:
         result = ft.get_credit_balance(provider)
         
