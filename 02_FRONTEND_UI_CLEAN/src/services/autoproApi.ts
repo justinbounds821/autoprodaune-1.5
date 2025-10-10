@@ -90,12 +90,6 @@ class AutoProApiService {
   schedulePost = async (post: any) => (await api.post("/api/social/post-now", post)).data;
   checkApiHealth = async () => (await api.get("/health")).data;
   
-  // FAZA 2.5: Automation (mapat la alias)
-  getAutomationStatus = async () => api.get("/api/automation/status").then(r=>r.data);
-  toggleAutomation = async (enabled:boolean) => api.post("/api/automation/toggle",{enabled}).then(r=>r.data);
-  triggerAutomation = async () => api.post("/api/automation/trigger").then(r=>r.data);
-  updateAutomationSettings = async (settings:any) => api.post("/api/automation/settings", settings).then(r=>r.data);
-  getAutomationLogs = async () => api.get("/api/automation/logs").then(r=>r.data);
 }
 
 const svc = new AutoProApiService();

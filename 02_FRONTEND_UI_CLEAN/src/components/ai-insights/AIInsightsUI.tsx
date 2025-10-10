@@ -19,6 +19,7 @@ import {
   Target
 } from 'lucide-react';
 import { InsightData, UIState } from './AIInsightsViewModel';
+import { useTranslation } from 'react-i18next';
 
 interface AIInsightsUIProps {
   state: UIState;
@@ -41,6 +42,7 @@ export const AIInsightsUI: React.FC<AIInsightsUIProps> = ({
   onSetType,
   onToggleFilters
 }) => {
+  const { t } = useTranslation();
   const getImpactIcon = (impact: InsightData['impact']) => {
     switch (impact) {
       case 'critical': return <AlertTriangle className="w-4 h-4 text-red-500" />;
@@ -76,7 +78,7 @@ export const AIInsightsUI: React.FC<AIInsightsUIProps> = ({
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <Brain className="w-8 h-8 animate-spin mx-auto mb-2" />
-          <p>AI analizează datele...</p>
+          <p>{t('aiInsights.loading')}</p>
         </div>
       </div>
     );
@@ -88,7 +90,7 @@ export const AIInsightsUI: React.FC<AIInsightsUIProps> = ({
         <AlertTriangle className="w-12 h-12 mx-auto mb-2 text-red-500" />
         <p className="text-red-600">{state.error}</p>
         <Button onClick={onLoadInsights} className="mt-4">
-          Încearcă din nou
+          {t('aiInsights.retry')}
         </Button>
       </div>
     );
@@ -103,7 +105,7 @@ export const AIInsightsUI: React.FC<AIInsightsUIProps> = ({
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total Insights</p>
+                  <p className="text-sm font-medium text-gray-600">{t('aiInsights.totalInsights')}</p>
                   <p className="text-2xl font-bold">{state.metrics.total_insights}</p>
                 </div>
                 <Brain className="w-8 h-8 text-blue-500" />
@@ -115,7 +117,7 @@ export const AIInsightsUI: React.FC<AIInsightsUIProps> = ({
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Încredere Mare</p>
+                  <p className="text-sm font-medium text-gray-600">{t('aiInsights.highConfidence')}</p>
                   <p className="text-2xl font-bold text-green-600">{state.metrics.high_confidence_insights}</p>
                 </div>
                 <Target className="w-8 h-8 text-green-500" />
@@ -127,7 +129,7 @@ export const AIInsightsUI: React.FC<AIInsightsUIProps> = ({
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Alertă Critice</p>
+                  <p className="text-sm font-medium text-gray-600">{t('aiInsights.criticalAlerts')}</p>
                   <p className="text-2xl font-bold text-red-600">{state.metrics.critical_alerts}</p>
                 </div>
                 <AlertTriangle className="w-8 h-8 text-red-500" />
@@ -139,7 +141,7 @@ export const AIInsightsUI: React.FC<AIInsightsUIProps> = ({
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Categorii</p>
+                  <p className="text-sm font-medium text-gray-600">{t('aiInsights.categories')}</p>
                   <p className="text-2xl font-bold text-purple-600">{Object.keys(state.metrics.categories).length}</p>
                 </div>
                 <Filter className="w-8 h-8 text-purple-500" />
@@ -153,7 +155,7 @@ export const AIInsightsUI: React.FC<AIInsightsUIProps> = ({
       <div className="flex gap-2">
         <Button onClick={() => onGenerateInsight('prediction', 'leads')}>
           <Plus className="w-4 h-4 mr-2" />
-          Generează Predicție
+          {t('aiInsights.generatePrediction')}
         </Button>
         <Button variant="outline" onClick={onToggleFilters}>
           <Filter className="w-4 h-4 mr-2" />
@@ -195,7 +197,7 @@ export const AIInsightsUI: React.FC<AIInsightsUIProps> = ({
       {filteredInsights.length === 0 && (
         <div className="text-center py-8 text-gray-500">
           <Brain className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-          <p>Nu există insights AI în sistem.</p>
+          <p>{t('aiInsights.noData')}</p>
         </div>
       )}
     </div>

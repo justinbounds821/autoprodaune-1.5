@@ -37,6 +37,25 @@ from .services.automation_scheduler import get_automation_scheduler
 
 log = logging.getLogger("uvicorn.error")
 
+# Optional Sentry monitoring
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.logging import LoggingIntegration
+
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[FastApiIntegration(), LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)],
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.2")),
+            profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0")),
+            environment=os.getenv("ENVIRONMENT", "development"),
+        )
+        log.info("✅ Sentry monitoring initialised")
+    except Exception as sentry_error:
+        log.warning("⚠️ Failed to initialise Sentry: %s", sentry_error)
+
 # Initialize FastAPI app
 app = FastAPI(
     title="AutoPro Daune API",
@@ -329,6 +348,13 @@ try:
     log.info("✅ Autoposter router loaded")
 except ImportError as e:
     log.warning("⚠️ Autoposter router dezactivat: %s", e)
+
+try:
+    from .routes.ai_insights import router as ai_insights_router
+    app.include_router(ai_insights_router)
+    log.info("✅ AI Insights router loaded")
+except ImportError as e:
+    log.warning("⚠️ AI Insights router dezactivat: %s", e)
 
 try:
     from .routes.notifications import router as notifications_router

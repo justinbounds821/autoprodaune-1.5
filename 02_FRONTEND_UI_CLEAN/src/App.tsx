@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { lazy, Suspense, useEffect } from "react";
 import { toast } from "sonner";
 import api from "./services/autoproApi";
+import { initMonitoring } from "./lib/monitoring";
 
 // lazy pages
 const Index = lazy(() => import("./pages/Index"));
@@ -23,6 +24,7 @@ const Fallback = <div className="p-4 text-sm text-muted-foreground">Loading…</
 
 function HealthPing() {
   useEffect(() => {
+    initMonitoring();
     (async () => {
       try {
         await api.healthCheck();

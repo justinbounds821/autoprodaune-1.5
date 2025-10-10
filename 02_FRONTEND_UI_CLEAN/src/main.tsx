@@ -2,6 +2,8 @@ import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import "./i18n";
+import { ThemeProvider } from "./providers/theme-provider";
 
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
   const [err, setErr] = React.useState<Error | null>(null);
@@ -27,7 +29,9 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>
 );
