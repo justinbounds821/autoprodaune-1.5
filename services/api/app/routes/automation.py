@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ..database import get_db
+from ..database import get_db, get_session_local
 from ..schemas.automation import (
     AutomationHistoryResponse,
     AutomationRuleCreate,
@@ -76,7 +76,15 @@ async def trigger_rule(
         raise HTTPException(status_code=404, detail="Regula nu a fost găsită")
 
     async def _run_rule():
-        await service.trigger_rule_async(rule_id, trigger_payload or {}, "manual")
+        session_local = get_session_local()
+        db = session_local()
+        try:
+            background_service = AutomationService(db)
+            await background_service.trigger_rule_async(
+                rule_id, dict(trigger_payload or {}), "manual"
+            )
+        finally:
+            db.close()
 
     asyncio.create_task(_run_rule())
     run_log = service.record_manual_run(rule_id, "queued")
@@ -88,7 +96,13 @@ async def run_due_rules(
     service: AutomationService = Depends(get_automation_service),
 ) -> Dict[str, Any]:
     async def _run_due():
-        await service.trigger_scheduled_rules()
+        session_local = get_session_local()
+        db = session_local()
+        try:
+            background_service = AutomationService(db)
+            await background_service.trigger_scheduled_rules()
+        finally:
+            db.close()
 
     asyncio.create_task(_run_due())
     return {"success": True, "message": "Rulele programate au fost trimise către worker"}

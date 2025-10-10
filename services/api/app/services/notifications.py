@@ -96,10 +96,18 @@ class NotificationService:
     # Email helpers
     # ------------------------------------------------------------------
     async def send_email_async(self, data: Dict[str, Any]) -> None:
-        await asyncio.get_event_loop().run_in_executor(None, self.send_email, data)
-
-    def send_email(self, data: Dict[str, Any]) -> None:
         recipients = self._resolve_recipients(data)
+        if not recipients:
+            logger.info("Nu există destinatari email pentru notificare")
+            return
+
+        payload = dict(data)
+        await asyncio.get_event_loop().run_in_executor(
+            None, self.send_email, payload, recipients
+        )
+
+    def send_email(self, data: Dict[str, Any], recipients: Optional[List[str]] = None) -> None:
+        recipients = recipients or self._resolve_recipients(data)
         if not recipients:
             logger.info("Nu există destinatari email pentru notificare")
             return
