@@ -60,8 +60,8 @@ const SocialMedia: React.FC = () => {
       setLoading(true);
       const response = await AutoProApiService.getSocialPosts();
 
-      if (response.success && response.data) {
-        setPosts(response.data);
+      if (response.posts || response.data || Array.isArray(response)) {
+        setPosts(response.posts || response.data || response);
       } else {
         console.error('Failed to load posts:', response.error);
         toast({
@@ -86,8 +86,8 @@ const SocialMedia: React.FC = () => {
     try {
       const response = await AutoProApiService.getPostAnalytics();
 
-      if (response.success && response.data) {
-        setAnalytics(response.data);
+      if (response.analytics || response.data || response.total_engagement !== undefined) {
+        setAnalytics(response.analytics || response.data || response);
       } else {
         console.error('Failed to load analytics:', response.error);
       }
@@ -103,8 +103,8 @@ const SocialMedia: React.FC = () => {
       
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.followers) {
-          setFollowerStats(data.followers);
+        if (data.followers || data.total !== undefined || Array.isArray(data)) {
+          setFollowerStats(data.followers || data);
         }
       } else {
         console.error('Failed to load follower stats');
@@ -228,8 +228,9 @@ const SocialMedia: React.FC = () => {
       setPosting(true);
       const response = await AutoProApiService.createPost(newPost);
 
-      if (response.success && response.data) {
-        setPosts(prev => [response.data, ...prev]);
+      if (response.post || response.id || response.data) {
+        const postData = response.post || response.data || response;
+        setPosts(prev => [postData, ...prev]);
         setNewPost({ content: '', platform: 'TikTok' });
         toast({
           title: "Post creat",
@@ -257,8 +258,9 @@ const SocialMedia: React.FC = () => {
       setPosting(true);
       const response = await AutoProApiService.schedulePost(scheduledPost);
 
-      if (response.success && response.data) {
-        setPosts(prev => [response.data, ...prev]);
+      if (response.post || response.id || response.data || response.scheduled) {
+        const postData = response.post || response.data || response;
+        setPosts(prev => [postData, ...prev]);
         setScheduledPost({ content: '', platform: 'TikTok', scheduledFor: '' });
         toast({
           title: "Post programat",
