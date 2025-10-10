@@ -36,7 +36,10 @@ from .core.monitoring import get_monitoring
 from .services.automation_scheduler import get_automation_scheduler
 
 # Import REAL routes (with authentication)
-from .routes import leads_real, financial_real, videos_real
+from .routes import (
+    leads_real, financial_real, videos_real, social_real, 
+    notifications_real, automation_real, payment_real, analytics_real
+)
 from .middleware.jwt_auth import get_current_user, CurrentUser
 from fastapi import Depends
 
@@ -75,7 +78,12 @@ print(f"✅ CORS origins: {sorted(_allowed)}")
 app.include_router(leads_real.router)
 app.include_router(financial_real.router)
 app.include_router(videos_real.router)
-print("✅ REAL routes registered: Leads, Financial, Videos (with auth)")
+app.include_router(social_real.router)
+app.include_router(notifications_real.router)
+app.include_router(automation_real.router)
+app.include_router(payment_real.router)
+app.include_router(analytics_real.router)
+print("✅ REAL routes registered: Leads, Financial, Videos, Social, Notifications, Automation, Payments, Analytics (ALL with auth)")
 
 # bridge: health route (no-op if you already have one)
 if not any([r.path == "/health" for r in app.router.routes]):
