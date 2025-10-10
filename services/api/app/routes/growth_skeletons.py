@@ -187,7 +187,7 @@ async def master_growth_status() -> Dict[str, Any]:
 
 @router.post("/master-growth-activation/activate-full-system")
 async def activate_full_system() -> Dict[str, Any]:
-    """Activate full growth system - stable contract"""
+    """Activate full growth system - stable contract."""
     return {
         "activated": True,
         "modules_started": ["growth-engine", "intelligent-conversion", "customer-nurturing"],
