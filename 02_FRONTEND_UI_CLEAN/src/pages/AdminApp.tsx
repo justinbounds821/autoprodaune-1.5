@@ -8,7 +8,8 @@ import AdminLayout from '../components/admin/AdminLayout';
 import AdminLogin from '../components/admin/AdminLogin';
 import Dashboard from './Dashboard';
 import VideoManagement from './VideoManagement';
-import AutomationControl from './AutomationControl';
+import AutomationPage from './automation';
+import NotificationsPage from './notifications';
 import SocialMedia from './SocialMedia';
 import FinancialDashboard from './FinancialDashboard';
 import LeadManagement from './LeadManagement';
@@ -54,7 +55,8 @@ const AdminApp: React.FC = () => {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="videos" element={<VideoManagement />} />
-            <Route path="automation" element={<AutomationControl />} />
+            <Route path="automation" element={<AutomationPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="social" element={<SocialMedia />} />
             <Route path="financial" element={<FinancialDashboard />} />
             <Route path="leads" element={<LeadManagement />} />

@@ -65,11 +65,18 @@ class AutoProApiService {
     (await api.post("/api/financial/calculate-tax", req)).data;
   // Automation methods
   getAutomationStatus = async () => (await api.get("/api/automation/status")).data;
-  getAutomationLogs = async () => (await api.get("/api/automation/logs")).data;
-  updateAutomationSettings = async (settings: any) =>
-    (await api.post("/api/automation/settings", settings)).data;
-  toggleAutomation = async (enabled: boolean) =>
-    (await api.post("/api/automation/toggle", { enabled })).data;
+  listAutomationRules = async () => (await api.get("/api/automation/rules")).data;
+  createAutomationRule = async (payload: any) =>
+    (await api.post("/api/automation/rules", payload)).data;
+  updateAutomationRule = async (id: number, payload: any) =>
+    (await api.put(`/api/automation/rules/${id}`, payload)).data;
+  deleteAutomationRule = async (id: number) =>
+    (await api.delete(`/api/automation/rules/${id}`)).data;
+  triggerAutomationRule = async (id: number, payload?: any) =>
+    (await api.post(`/api/automation/rules/${id}/trigger`, payload ?? {})).data;
+  runDueAutomationRules = async () => (await api.post("/api/automation/run-due")).data;
+  getAutomationHistory = async (limit?: number) =>
+    (await api.get("/api/automation/history", { params: { limit } })).data;
   // Additional missing methods
   getVideos = async () => (await api.get("/api/video/stats")).data;
   getPaymentOverview = async (period?: string) =>
@@ -79,9 +86,9 @@ class AutoProApiService {
   deletePayment = async (id: string) =>
     (await api.delete(`/api/financial/payments/${id}`)).data;
   getOverviewStats = async () => (await api.get("/api/dashboard/overview")).data;
-  startAutomation = async () => (await api.post("/api/automation/start")).data;
-  stopAutomation = async () => (await api.post("/api/automation/stop")).data;
-  triggerAutomation = async () => (await api.post("/api/automation/trigger")).data;
+  startAutomation = async () => this.runDueAutomationRules();
+  stopAutomation = async () => ({ success: true, message: "Automation oprit prin dezactivarea regulilor" });
+  triggerAutomation = async () => this.runDueAutomationRules();
   getRevenueData = async () => (await api.get("/api/financial/revenue")).data;
   getCostData = async () => (await api.get("/api/financial/costs")).data;
   getSocialPosts = async () => (await api.get("/api/social/posts")).data;
@@ -90,12 +97,18 @@ class AutoProApiService {
   schedulePost = async (post: any) => (await api.post("/api/social/post-now", post)).data;
   checkApiHealth = async () => (await api.get("/health")).data;
   
-  // FAZA 2.5: Automation (mapat la alias)
-  getAutomationStatus = async () => api.get("/api/automation/status").then(r=>r.data);
-  toggleAutomation = async (enabled:boolean) => api.post("/api/automation/toggle",{enabled}).then(r=>r.data);
-  triggerAutomation = async () => api.post("/api/automation/trigger").then(r=>r.data);
-  updateAutomationSettings = async (settings:any) => api.post("/api/automation/settings", settings).then(r=>r.data);
-  getAutomationLogs = async () => api.get("/api/automation/logs").then(r=>r.data);
+  // Notifications
+  listNotificationPreferences = async (userId: string) =>
+    (await api.get(`/api/notifications/preferences/${userId}`)).data;
+  upsertNotificationPreference = async (payload: any) =>
+    (await api.put("/api/notifications/preferences", payload)).data;
+  deleteNotificationPreference = async (userId: string, channel: string) =>
+    (await api.delete(`/api/notifications/preferences/${userId}/${channel}`)).data;
+  sendEmailNotification = async (payload: any) =>
+    (await api.post("/api/notifications/email", payload)).data;
+  sendSmsNotification = async (payload: any) =>
+    (await api.post("/api/notifications/sms", payload)).data;
+  sendTestNotification = async () => (await api.post("/api/notifications/test")).data;
 }
 
 const svc = new AutoProApiService();

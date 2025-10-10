@@ -69,7 +69,7 @@ def create_tables():
     pentru a crea tabelele necesare.
     """
     # Importă toate modelele pentru a le înregistra
-    from .models import financial
+    from .models import financial, automation
     
     # Creează toate tabelele
     Base.metadata.create_all(bind=get_engine())
@@ -82,7 +82,7 @@ def drop_tables():
     ATENȚIE: Această funcție va șterge toate datele!
     """
     # Importă toate modelele pentru a le înregistra
-    from .models import financial
+    from .models import financial, automation
     
     # Șterge toate tabelele
     Base.metadata.drop_all(bind=get_engine())

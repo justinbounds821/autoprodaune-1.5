@@ -15,7 +15,14 @@ from .financial import (
     ProviderType,
     OperationType,
     RevenueSource,
-    AlertType
+    AlertType,
+)
+from .automation import (
+    AutomationRule,
+    AutomationCondition,
+    AutomationAction,
+    AutomationRunHistory,
+    NotificationPreference,
 )
 
 __all__ = [
@@ -29,5 +36,10 @@ __all__ = [
     "ProviderType",
     "OperationType",
     "RevenueSource",
-    "AlertType"
+    "AlertType",
+    "AutomationRule",
+    "AutomationCondition",
+    "AutomationAction",
+    "AutomationRunHistory",
+    "NotificationPreference",
 ]

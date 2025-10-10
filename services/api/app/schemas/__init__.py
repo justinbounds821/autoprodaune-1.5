@@ -8,46 +8,56 @@ from .financial import (
     # API Cost schemas
     APICostCreate,
     APICostResponse,
-    
+
     # Revenue schemas
     RevenueCreate,
     RevenueResponse,
-    
+
     # Financial Metrics schemas
     FinancialMetricsCreate,
     FinancialMetricsResponse,
-    
+
     # Campaign Metrics schemas
     CampaignMetricsCreate,
     CampaignMetricsResponse,
-    
+
     # Credit Balance schemas
     CreditBalanceResponse,
     CreditBalanceUpdate,
-    
+
     # Budget Alert schemas
     BudgetAlertCreate,
     BudgetAlertResponse,
-    
+
     # Dashboard schemas
     FinancialDashboardResponse,
-    
+
     # Analysis schemas
     ROIAnalysisRequest,
     ROIAnalysisResponse,
     ProfitLossRequest,
     ProfitLossResponse,
-    
+
     # Bulk operation schemas
     BulkAPICostCreate,
     BulkRevenueCreate,
-    
+
     # Statistics schemas
     FinancialStatsResponse,
-    
+
     # Export schemas
     ExportRequest,
-    ExportResponse
+    ExportResponse,
+)
+from .automation import (
+    AutomationActionPayload,
+    AutomationConditionPayload,
+    AutomationHistoryResponse,
+    AutomationRuleCreate,
+    AutomationRuleResponse,
+    AutomationRuleUpdate,
+    NotificationPreferencePayload,
+    NotificationPreferenceResponse,
 )
 
 __all__ = [
@@ -93,5 +103,13 @@ __all__ = [
     
     # Export schemas
     "ExportRequest",
-    "ExportResponse"
+    "ExportResponse",
+    "AutomationActionPayload",
+    "AutomationConditionPayload",
+    "AutomationHistoryResponse",
+    "AutomationRuleCreate",
+    "AutomationRuleResponse",
+    "AutomationRuleUpdate",
+    "NotificationPreferencePayload",
+    "NotificationPreferenceResponse",
 ]

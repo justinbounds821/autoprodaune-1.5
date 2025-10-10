@@ -70,6 +70,15 @@
 
 ---
 
+## ⚙️ Automation & Notifications (New)
+
+- 📅 Editor cron complet & reguli IF-THEN expuse prin `/api/automation/rules`, cu istoric în `/api/automation/history` și worker async pentru execuții programate.
+- 📓 Tabele noi în `services/api/database/automation_tables.sql` pentru `automation_rules`, `automation_actions`, `automation_run_history` și preferințe de notificări.
+- ✉️ Serviciu de notificări cu suport email (SMTP) și SMS (Twilio) + management preferințe prin `/api/notifications/preferences/{userId}`.
+- 🖥️ Panouri noi în frontend (`/admin/automation`, `/admin/notifications`) pentru configurarea regulilor, monitorizarea execuțiilor și gestionarea canalelor utilizatorilor.
+
+---
+
 ## 📊 PROJECT STRUCTURE
 
 ```
