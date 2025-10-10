@@ -102,8 +102,9 @@ const VideoManagement: React.FC = () => {
       const response = await fetch('/api/advanced-video/list-generated');
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.videos) {
-          setVideos(data.videos.map((v: any) => ({
+        if (data.videos || Array.isArray(data)) {
+          const videosList = data.videos || data;
+          setVideos(videosList.map((v: any) => ({
             id: v.filename.replace('.png', ''),
             title: v.config?.request?.text || 'Professional Video',
             status: 'completed' as const,
@@ -146,8 +147,8 @@ const VideoManagement: React.FC = () => {
       const response = await fetch('/api/professional-video/avatars');
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.avatars) {
-          setAvatars(data.avatars);
+        if (data.avatars || Array.isArray(data)) {
+          setAvatars(data.avatars || data);
         }
       }
     } catch (error) {
@@ -160,8 +161,8 @@ const VideoManagement: React.FC = () => {
       const response = await fetch('/api/professional-video/backgrounds');
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.backgrounds) {
-          setBackgrounds(data.backgrounds);
+        if (data.backgrounds || Array.isArray(data)) {
+          setBackgrounds(data.backgrounds || data);
         }
       }
     } catch (error) {
@@ -174,7 +175,7 @@ const VideoManagement: React.FC = () => {
       const response = await fetch('/api/advanced-video/capabilities');
       if (response.ok) {
         const data = await response.json();
-        if (data.success) {
+        if (data.avatars || data.backgrounds || data.aspect_ratios) {
           setVideoCapabilities(data);
         }
       }
@@ -191,12 +192,12 @@ const VideoManagement: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.thumbnail_base64) {
+        if (data.thumbnail_base64 || data.thumbnail_url) {
           // Update video în listă cu thumbnail-ul nou
           setVideos(prevVideos =>
             prevVideos.map(video =>
               video.id === videoId
-                ? { ...video, thumbnail_base64: data.thumbnail_base64 }
+                ? { ...video, thumbnail_base64: data.thumbnail_base64 || data.thumbnail_url }
                 : video
             )
           );
@@ -288,7 +289,7 @@ const VideoManagement: React.FC = () => {
 
       // Use advanced professional video generation API
       const requestBody = {
-        text: prompt,
+        script: prompt,
         avatar_type: selectedAvatar,
         background_type: selectedBackground,
         aspect_ratio: aspectRatio,
@@ -305,30 +306,17 @@ const VideoManagement: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.success) {
-          // Create new video entry
-          const newVideo: ProfessionalVideo = {
-            id: data.video_preview_path?.split('/').pop()?.replace('.png', '') || Date.now().toString(),
-            title: prompt.substring(0, 50) + (prompt.length > 50 ? '...' : ''),
-            status: 'completed',
-            url: data.video_preview_path,
-            thumbnail: data.video_preview_path,
-            preview_base64: data.preview_image_base64,
-            createdAt: new Date().toISOString(),
-            provider: 'AutoPro Professional AI',
-            avatar_type: selectedAvatar,
-            background_type: selectedBackground,
-            aspect_ratio: aspectRatio
-          };
-
-          setVideos(prev => [newVideo, ...prev]);
+        if (data.status === "queued" || data.job_id) {
+          // Video generation queued successfully
           toast({
-            title: "🎬 Video profesional generat!",
-            description: `Video cu avatar ${selectedAvatar} și fundal ${selectedBackground} a fost creat cu succes!`,
+            title: "🎬 Video generat cu succes!",
+            description: `Job ID: ${data.job_id}. Estimare: ${data.estimated_time || "10-15 minute"}`,
           });
 
-          // Reload videos to get updated list
-          loadVideos();
+          // Reload videos to get updated list after a short delay
+          setTimeout(() => {
+            loadVideos();
+          }, 2000);
         } else {
           throw new Error(data.message || 'Failed to generate video');
         }
@@ -358,27 +346,24 @@ const VideoManagement: React.FC = () => {
 
   const handleDeleteVideo = async (id: string) => {
     try {
-      // Call delete API
-      const response = await fetch(`/api/video/${id}`, {
-        method: 'DELETE',
-      });
+      // Use the new autoproApi method
+      const response = await AutoProApiService.deleteVideoJob(id);
 
-      if (response.ok) {
+      if (response.success || response.deleted || response.message) {
         setVideos(prev => prev.filter(v => v.id !== id));
         toast({
           title: "✅ Video șters",
-          description: "Video-ul a fost șters cu succes din sistem!",
+          description: response.message || "Video-ul a fost șters cu succes din sistem!",
         });
       } else {
-        throw new Error('Delete failed');
+        throw new Error(response.error || 'Delete failed');
       }
     } catch (error) {
       console.error('Failed to delete video:', error);
-      // Still remove from UI even if API fails
-      setVideos(prev => prev.filter(v => v.id !== id));
       toast({
-        title: "Video șters local",
-        description: "Video-ul a fost eliminat din listă.",
+        title: "Eroare",
+        description: "Nu s-a putut șterge video-ul.",
+        variant: "destructive",
       });
     }
   };
@@ -442,8 +427,8 @@ const VideoManagement: React.FC = () => {
       const response = await fetch('/api/video/heygen/avatars');
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.avatars) {
-          setHeygenAvatars(data.avatars);
+        if (data.avatars || Array.isArray(data)) {
+          setHeygenAvatars(data.avatars || data);
           setHeygenKeyAvailable(true);
         }
       } else if (response.status === 400) {
@@ -495,14 +480,15 @@ const VideoManagement: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.video_id) {
+        if (data.video_id || data.id || data.job_id) {
+          const videoId = data.video_id || data.id || data.job_id;
           toast({
             title: "🎬 Video HeyGen în generare!",
-            description: `Video ID: ${data.video_id}. Estimare: ${data.estimated_completion || '2-5 min'}`,
+            description: `Video ID: ${videoId}. Estimare: ${data.estimated_completion || data.estimated_time || '2-5 min'}`,
           });
 
           // Start polling for status
-          pollHeyGenStatus(data.video_id);
+          pollHeyGenStatus(videoId);
         } else {
           throw new Error(data.message || 'Failed to start generation');
         }
