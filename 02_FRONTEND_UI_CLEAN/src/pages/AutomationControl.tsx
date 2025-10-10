@@ -28,8 +28,8 @@ const AutomationControl: React.FC = () => {
       setLoading(true);
       const response = await AutoProApiService.getAutomationStatus();
 
-      if (response.success && response.data) {
-        setStatus(response.data);
+      if (response.automation_active !== undefined || response.daily_target !== undefined) {
+        setStatus(response);
       } else {
         console.error('Failed to load automation status:', response.error);
         toast({
@@ -54,8 +54,8 @@ const AutomationControl: React.FC = () => {
     try {
       const response = await AutoProApiService.getAutomationLogs();
 
-      if (response.success && response.data) {
-        setLogs(response.data);
+      if (response.logs || Array.isArray(response)) {
+        setLogs(response.logs || response);
       } else {
         console.error('Failed to load automation logs:', response.error);
       }
@@ -75,7 +75,7 @@ const AutomationControl: React.FC = () => {
         response = await AutoProApiService.stopAutomation();
       }
 
-      if (response.success) {
+      if (response.success || response.status === "started" || response.status === "stopped" || response.automation_active !== undefined) {
         await loadStatus();
         toast({
           title: enabled ? "Automation pornit" : "Automation oprit",
@@ -101,7 +101,7 @@ const AutomationControl: React.FC = () => {
       setActionLoading(true);
       const response = await AutoProApiService.triggerAutomation();
 
-      if (response.success) {
+      if (response.success || response.triggered || response.status === "triggered" || response.message) {
         await loadStatus();
         await loadLogs();
         toast({

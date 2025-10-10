@@ -113,6 +113,7 @@ export default function PaymentTracker() {
   useEffect(() => {
     loadPayments();
     loadOverview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
   const loadPayments = async () => {
@@ -120,8 +121,8 @@ export default function PaymentTracker() {
       setLoading(true);
       const response = await AutoProApiService.getPayments(filters);
       
-      if (response.success && response.data) {
-        setPayments(response.data.payments || []);
+      if (response.payments || response.data?.payments || Array.isArray(response)) {
+        setPayments(response.payments || response.data?.payments || response);
       } else {
         console.error('Failed to load payments:', response.error);
         toast({
@@ -146,8 +147,8 @@ export default function PaymentTracker() {
     try {
       const response = await AutoProApiService.getPaymentOverview(filters.period);
       
-      if (response.success && response.data) {
-        setOverview(response.data.overview);
+      if (response.overview || response.data?.overview || response.total_amount !== undefined) {
+        setOverview(response.overview || response.data?.overview || response);
       }
     } catch (error) {
       console.error('Failed to load payment overview:', error);
@@ -167,7 +168,7 @@ export default function PaymentTracker() {
 
       const response = await AutoProApiService.createPayment(paymentData);
 
-      if (response.success && response.data) {
+      if (response.payment || response.id || response.success) {
         toast({
           title: "Plată creată",
           description: "Plata a fost înregistrată cu succes.",
@@ -204,7 +205,7 @@ export default function PaymentTracker() {
     try {
       const response = await AutoProApiService.updatePayment(paymentId, updates);
 
-      if (response.success) {
+      if (response.success || response.payment || response.updated || response.message) {
         toast({
           title: "Plată actualizată",
           description: "Plata a fost actualizată cu succes.",
@@ -228,7 +229,7 @@ export default function PaymentTracker() {
     try {
       const response = await AutoProApiService.deletePayment(paymentId);
 
-      if (response.success) {
+      if (response.success || response.deleted || response.message) {
         toast({
           title: "Plată ștearsă",
           description: "Plata a fost ștearsă cu succes.",
