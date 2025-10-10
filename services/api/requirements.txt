@@ -21,7 +21,6 @@ aiohttp==3.9.1
 # Internal Video Engine Dependencies
 moviepy==1.0.3
 pydub==0.25.1
-opencv-python==4.8.1.78
 ffmpeg-python==0.2.0
 
 # Background Tasks
@@ -34,7 +33,7 @@ google-api-python-client==2.111.0
 google-auth-httplib2==0.2.0
 google-auth-oauthlib==1.2.0
 instagrapi==2.0.0
-tiktok-api==5.3.0
+# tiktok-api==5.3.0  # Commented: version not available, using TikTok Business API instead
 
 # Video Processing
 opencv-python==4.9.0.80
