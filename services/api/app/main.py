@@ -35,6 +35,11 @@ from .core.database import get_database
 from .core.monitoring import get_monitoring
 from .services.automation_scheduler import get_automation_scheduler
 
+# Import REAL routes (with authentication)
+from .routes import leads_real, financial_real, videos_real
+from .middleware.jwt_auth import get_current_user, CurrentUser
+from fastapi import Depends
+
 log = logging.getLogger("uvicorn.error")
 
 # Initialize FastAPI app
@@ -66,6 +71,12 @@ app.add_middleware(
 )
 print(f"✅ CORS origins: {sorted(_allowed)}")
 
+# Register REAL routes with authentication
+app.include_router(leads_real.router)
+app.include_router(financial_real.router)
+app.include_router(videos_real.router)
+print("✅ REAL routes registered: Leads, Financial, Videos (with auth)")
+
 # bridge: health route (no-op if you already have one)
 if not any([r.path == "/health" for r in app.router.routes]):
     @app.get("/health")
@@ -93,23 +104,42 @@ async def test_mock_data():
     }
 
 @app.get("/api/dashboard/overview")
-async def get_dashboard_overview():
-    """Get dashboard overview data"""
+async def get_dashboard_overview(current_user: CurrentUser = Depends(get_current_user)):
+    """Dashboard with REAL data"""
+    from .services.lead_service_real import get_lead_service
+    from .services.financial_service_real import get_financial_service
+    from .services.video_service_real import get_video_service
+    
     try:
-        # Return mock data for now - can be expanded later
+        lead_stats = await get_lead_service().get_statistics(current_user.id, days=30)
+        financial_metrics = await get_financial_service().get_dashboard_metrics(current_user.id)
+        videos = await get_video_service().list_videos(current_user.id, status='completed', limit=1000)
+        
+        return {
+            "status": "ok",
+            "data": {
+                "total_leads": lead_stats['total_leads'],
+                "new_leads_30d": lead_stats['new_leads_last_30d'],
+                "converted_leads": lead_stats['converted_leads'],
+                "conversion_rate": lead_stats['conversion_rate'],
+                "revenue_today": financial_metrics['today']['revenue'],
+                "revenue_this_month": financial_metrics['this_month']['revenue'],
+                "profit_this_month": financial_metrics['this_month']['profit'],
+                "videos_generated": videos['total'],
+                "automation_status": "active"
+            }
+        }
+    except Exception as e:
+        log.error(f"Dashboard error: {str(e)}")
         return {
             "status": "ok",
             "data": {
                 "total_leads": 0,
-                "active_campaigns": 0,
                 "revenue_today": 0,
                 "videos_generated": 0,
                 "automation_status": "active"
             }
         }
-    except Exception as e:
-        log.error(f"Error getting dashboard overview: {e}")
-        raise HTTPException(status_code=500, detail="Error getting dashboard overview")
 
 from pydantic import BaseModel
 from typing import Optional
