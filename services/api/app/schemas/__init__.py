@@ -50,6 +50,15 @@ from .financial import (
     ExportResponse
 )
 
+from .ai_insights import (
+    AIInsightData,
+    AIInsightMetrics,
+    AIInsightsContext,
+    AIInsightsFilters,
+    AIInsightsReportRequest,
+    AIInsightsResponse,
+)
+
 __all__ = [
     # API Cost schemas
     "APICostCreate",
@@ -66,7 +75,15 @@ __all__ = [
     # Campaign Metrics schemas
     "CampaignMetricsCreate",
     "CampaignMetricsResponse",
-    
+
+    # AI Insights
+    "AIInsightData",
+    "AIInsightMetrics",
+    "AIInsightsContext",
+    "AIInsightsFilters",
+    "AIInsightsReportRequest",
+    "AIInsightsResponse",
+
     # Credit Balance schemas
     "CreditBalanceResponse",
     "CreditBalanceUpdate",

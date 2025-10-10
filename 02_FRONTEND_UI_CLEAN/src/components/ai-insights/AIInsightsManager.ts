@@ -4,6 +4,8 @@
  * File Length: < 200 lines ✅
  */
 
+import api from '@/services/autoproApi';
+
 export interface InsightData {
   id: string;
   type: 'trend' | 'prediction' | 'recommendation' | 'alert';
@@ -23,50 +25,28 @@ export interface AIInsightMetrics {
   categories: Record<string, number>;
 }
 
+export interface AIInsightsAPIContext {
+  window: { start: string; end: string };
+  source_counts: Record<string, number>;
+}
+
+export interface AIInsightsAPIResponse {
+  insights: InsightData[];
+  metrics: AIInsightMetrics;
+  context: AIInsightsAPIContext;
+}
+
 export class AIInsightsManager {
   private insights: InsightData[] = [];
   private metrics: AIInsightMetrics | null = null;
+  private context: AIInsightsAPIContext | null = null;
 
-  async loadInsights(): Promise<InsightData[]> {
+  async loadInsights(filters?: Record<string, unknown>): Promise<InsightData[]> {
     try {
-      // Simulated AI insights - în producție ar fi API call
-      const mockInsights: InsightData[] = [
-        {
-          id: '1',
-          type: 'prediction',
-          title: 'Creștere Așteptată în Leads',
-          description: 'AI prezice o creștere de 23% în leads pentru următoarele 30 de zile',
-          confidence: 87,
-          impact: 'high',
-          category: 'leads',
-          data: { predicted_increase: 23, period: '30d', factors: ['seasonal', 'marketing_campaign'] },
-          created_at: '2025-01-15T10:00:00Z'
-        },
-        {
-          id: '2',
-          type: 'alert',
-          title: 'Costuri Marketing Peste Buget',
-          description: 'Costurile de marketing au depășit bugetul cu 15%',
-          confidence: 95,
-          impact: 'critical',
-          category: 'financial',
-          data: { overspend_percentage: 15, budget_category: 'marketing', amount: 750 },
-          created_at: '2025-01-15T09:30:00Z'
-        },
-        {
-          id: '3',
-          type: 'recommendation',
-          title: 'Optimizare Postare Social Media',
-          description: 'Postează pe Instagram între 18:00-20:00 pentru engagement maxim',
-          confidence: 78,
-          impact: 'medium',
-          category: 'social',
-          data: { platform: 'Instagram', optimal_time: '18:00-20:00', expected_engagement: '+34%' },
-          created_at: '2025-01-15T08:45:00Z'
-        }
-      ];
-      
-      this.insights = mockInsights;
+      const response: AIInsightsAPIResponse = await api.getAIInsights(filters);
+      this.insights = response.insights;
+      this.metrics = response.metrics;
+      this.context = response.context;
       return this.insights;
     } catch (error) {
       console.error('Failed to load AI insights:', error);
@@ -81,7 +61,7 @@ export class AIInsightsManager {
         type,
         title: this.generateInsightTitle(type, category),
         description: this.generateInsightDescription(type, category),
-        confidence: Math.floor(Math.random() * 30) + 70, // 70-100%
+        confidence: Math.floor(Math.random() * 30) + 70,
         impact: this.determineImpact(type),
         category,
         data: this.generateInsightData(type, category),
@@ -89,6 +69,13 @@ export class AIInsightsManager {
       };
 
       this.insights.unshift(newInsight);
+      if (this.metrics) {
+        this.metrics.total_insights += 1;
+        if (newInsight.confidence >= 80) this.metrics.high_confidence_insights += 1;
+        if (newInsight.impact === 'critical') this.metrics.critical_alerts += 1;
+        this.metrics.categories[newInsight.category] =
+          (this.metrics.categories[newInsight.category] || 0) + 1;
+      }
       return newInsight;
     } catch (error) {
       console.error('Failed to generate insight:', error);
@@ -97,10 +84,14 @@ export class AIInsightsManager {
   }
 
   getMetrics(): AIInsightMetrics {
+    if (this.metrics) {
+      return this.metrics;
+    }
+
     const total_insights = this.insights.length;
     const high_confidence_insights = this.insights.filter(i => i.confidence >= 80).length;
     const critical_alerts = this.insights.filter(i => i.impact === 'critical').length;
-    
+
     const categories = this.insights.reduce((acc, insight) => {
       acc[insight.category] = (acc[insight.category] || 0) + 1;
       return acc;
@@ -112,6 +103,10 @@ export class AIInsightsManager {
       critical_alerts,
       categories
     };
+  }
+
+  getContext(): AIInsightsAPIContext | null {
+    return this.context;
   }
 
   getInsightsByCategory(category: InsightData['category']): InsightData[] {
@@ -133,7 +128,7 @@ export class AIInsightsManager {
       prediction: {
         leads: 'Predicție Leads',
         financial: 'Predicție Financiară',
-        social: 'Predicție Social Media',
+        social: 'Predicție Socială',
         operations: 'Predicție Operațională'
       },
       recommendation: {
@@ -145,10 +140,10 @@ export class AIInsightsManager {
       alert: {
         leads: 'Alertă Leads',
         financial: 'Alertă Financiară',
-        social: 'Alertă Social Media',
+        social: 'Alertă Socială',
         operations: 'Alertă Operațională'
       }
-    };
+    } as const;
     return titles[type][category];
   }
 

@@ -3,17 +3,22 @@ import { Link } from 'react-router-dom';
 import { Phone, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import autopro_logo from '@/assets/autopro-logo.png';
+import { ThemeToggle } from './ThemeToggle';
+import { LanguageSwitcher } from './LanguageSwitcher';
+import { useTranslation } from 'react-i18next';
 
 const Header = () => {
+  const { t } = useTranslation();
+
   return (
-    <header className="bg-white shadow-sm border-b sticky top-0 z-50">
+    <header className="bg-white dark:bg-background shadow-sm border-b sticky top-0 z-50 transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-3">
-            <img 
-              src={autopro_logo} 
-              alt="AutoPro Daune Logo" 
+            <img
+              src={autopro_logo}
+              alt="AutoPro Daune Logo"
               className="h-10 w-auto"
             />
             <div>
@@ -24,22 +29,22 @@ const Header = () => {
 
           {/* Navigation */}
           <div className="hidden md:flex items-center space-x-6">
-            <Link 
-              to="/" 
+            <Link
+              to="/"
               className="text-foreground hover:text-primary transition-colors"
             >
-              Acasă
+              {t('header.home')}
             </Link>
-            <Link 
-              to="/track/demo" 
+            <Link
+              to="/track/demo"
               className="text-foreground hover:text-primary transition-colors"
             >
-              Urmărește Status
+              {t('header.track')}
             </Link>
             <div className="flex items-center space-x-2 text-sm">
               <Phone className="w-4 h-4 text-primary" />
-              <a 
-                href="tel:+40747694114" 
+              <a
+                href="tel:+40747694114"
                 className="text-primary font-medium hover:text-primary-dark"
               >
                 0747.694.114
@@ -47,13 +52,16 @@ const Header = () => {
             </div>
           </div>
 
-          {/* Admin Access */}
-          <Link to="/dashboard">
-            <Button variant="outline" size="sm">
-              <Settings className="w-4 h-4 mr-2" />
-              Dashboard
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <LanguageSwitcher />
+            <Link to="/dashboard">
+              <Button variant="outline" size="sm">
+                <Settings className="w-4 h-4 mr-2" />
+                {t('header.dashboard')}
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
     </header>

@@ -5,18 +5,20 @@
  * Uses Manager/ViewModel/UI pattern ✅
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { AIInsightsManager } from './AIInsightsManager';
 import { AIInsightsViewModel } from './AIInsightsViewModel';
 import { AIInsightsUI } from './AIInsightsUI';
+import { useTranslation } from 'react-i18next';
 
 export default function AIInsightsDashboard() {
   const { toast } = useToast();
+  const { t } = useTranslation();
   
   // Dependency Injection - Clean Architecture ✅
-  const manager = new AIInsightsManager();
-  const viewModel = new AIInsightsViewModel(manager);
+  const manager = useMemo(() => new AIInsightsManager(), []);
+  const viewModel = useMemo(() => new AIInsightsViewModel(manager), [manager]);
   
   // UI State Management
   const [state, setState] = React.useState(viewModel.getState());
@@ -37,6 +39,16 @@ export default function AIInsightsDashboard() {
     return unsubscribe;
   }, [viewModel]);
 
+  useEffect(() => {
+    if (state.error) {
+      toast({
+        title: t('aiInsights.errorTitle'),
+        description: state.error || t('aiInsights.errorDescription'),
+        variant: 'destructive'
+      });
+    }
+  }, [state.error, toast, t]);
+
   // Event Handlers - Delegated to ViewModel ✅
   const handleLoadInsights = () => {
     viewModel.loadInsights();
@@ -45,8 +57,8 @@ export default function AIInsightsDashboard() {
   const handleGenerateInsight = (type: any, category: any) => {
     viewModel.generateInsight(type, category);
     toast({
-      title: "Insight generat",
-      description: "AI a generat un insight nou pentru tine.",
+      title: t('aiInsights.generated'),
+      description: '',
     });
   };
 
