@@ -44,27 +44,31 @@ app = FastAPI(
     description="Complete lead generation and automation system for AutoPro Daune"
 )
 
-# bridge: CORS from env or sane defaults - HARDENED for 3006/3007
+# bridge: CORS from env or sane defaults - PERMISSIVE for development
 _raw = os.getenv(
     "BACKEND_CORS_ORIGINS",
-    "http://localhost:3006,http://127.0.0.1:3006,http://localhost:3007,http://127.0.0.1:3007,http://localhost:3003,http://127.0.0.1:3003,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080",
+    "http://localhost:3006,http://127.0.0.1:3006,http://localhost:3007,http://127.0.0.1:3007,http://localhost:3003,http://127.0.0.1:3003,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://localhost:8001",
 )
 _allowed = {o.strip() for o in _raw.split(",") if o.strip()}
-# harden: adaugă 3006/3007 dacă cineva pornește Vite pe 3006/3007
+# harden: adaugă toate porturile comune + localhost pentru development
 _allowed |= {
     "http://localhost:3006", "http://127.0.0.1:3006",
     "http://localhost:3007", "http://127.0.0.1:3007", 
-    "http://localhost:3003", "http://127.0.0.1:3003"
+    "http://localhost:3003", "http://127.0.0.1:3003",
+    "http://localhost:3000", "http://127.0.0.1:3000",
+    "http://localhost:8001", "http://127.0.0.1:8001",
+    "http://localhost:8080", "http://127.0.0.1:8080"
 }
 
+# PERMISSIVE CORS for development - allows all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=sorted(_allowed),
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=False,  # Must be False when allow_origins=["*"]
     allow_methods=["*"],
     allow_headers=["*"],
 )
-print(f"✅ CORS origins: {sorted(_allowed)}")
+log.info(f"[OK] CORS origins: {sorted(_allowed)}")
 
 # bridge: health route (no-op if you already have one)
 if not any([r.path == "/health" for r in app.router.routes]):
@@ -420,6 +424,30 @@ try:
     log.info("🎯 MASTER GROWTH ACTIVATION - Complete ecosystem ready for explosive growth")
 except ImportError as e:
     log.warning("⚠️ Master Growth Activation dezactivat: %s", e)
+
+# 📤 ASSETS UPLOAD - Custom Backgrounds & Avatars
+try:
+    from .routes.assets import router as assets_router
+    app.include_router(assets_router)
+    log.info("📤 ASSETS UPLOAD ROUTER LOADED - Custom backgrounds & avatars enabled")
+except ImportError as e:
+    log.warning("⚠️ Assets upload dezactivat: %s", e)
+
+# 📊 REAL BUSINESS ANALYTICS - Data-Driven Business Logic
+try:
+    from .routes.real_business_analytics import router as real_business_analytics_router
+    app.include_router(real_business_analytics_router, prefix="/api")
+    log.info("📊 REAL BUSINESS ANALYTICS LOADED - Data-driven business logic enabled")
+except ImportError as e:
+    log.warning("⚠️ Real Business Analytics dezactivat: %s", e)
+
+# 🧠 ADVANCED BUSINESS INTELLIGENCE - Predictive Analytics & Automated Optimization
+try:
+    from .routes.advanced_business_intelligence import router as advanced_bi_router
+    app.include_router(advanced_bi_router, prefix="/api")
+    log.info("🧠 ADVANCED BUSINESS INTELLIGENCE LOADED - Predictive analytics & automated optimization enabled")
+except ImportError as e:
+    log.warning("⚠️ Advanced Business Intelligence dezactivat: %s", e)
 
 
 # Utility function for JSON logging

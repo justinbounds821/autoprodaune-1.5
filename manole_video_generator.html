@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 Manole Video Generator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .image-preview {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .manole-img {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 5px solid #4ECDC4;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .prompt-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .prompt-text {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #4ECDC4;
+        }
+        
+        .voice-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .generate-btn {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.2em;
+            border-radius: 25px;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.3s ease;
+        }
+        
+        .generate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .generate-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.processing {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .video-result {
+            margin-top: 20px;
+            text-align: center;
+            display: none;
+        }
+        
+        .video-result video {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4ECDC4;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 Manole Video Generator</h1>
+            <p>Generare video profesional cu lip-sync pentru Manole</p>
+        </div>
+        
+        <div class="content">
+            <div class="image-preview">
+                <img src="https://via.placeholder.com/200x200/4ECDC4/white?text=MANOLE" alt="Manole" class="manole-img" id="manoleImage">
+                <p><strong>Avatar: Manole Mihai</strong></p>
+            </div>
+            
+            <div class="prompt-section">
+                <h3>📝 Prompt Generat Automat:</h3>
+                <div class="prompt-text" id="generatedPrompt">
+                    "Salut, sunt Manole și vă explic cum să vă recuperați despăgubirile după un accident de mașină. Săptămâna aceasta am ajutat 3 clienți să primească peste 50.000 de lei fiecare. Contactați-mă pentru o consultație gratuită!"
+                </div>
+            </div>
+            
+            <div class="voice-info">
+                <h4>🎤 Configurație Voce:</h4>
+                <p><strong>Provider:</strong> ElevenLabs AI</p>
+                <p><strong>Stil:</strong> Profesional, masculin</p>
+                <p><strong>Calitate:</strong> HD Audio</p>
+            </div>
+            
+            <button class="generate-btn" onclick="generateVideo()" id="generateBtn">
+                🚀 Generează Video cu Lip-Sync
+            </button>
+            
+            <div class="status" id="status"></div>
+            
+            <div class="video-result" id="videoResult">
+                <h3>🎥 Video Generat:</h3>
+                <video controls id="generatedVideo">
+                    Your browser does not support the video tag.
+                </video>
+                <div id="videoInfo"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const prompts = [
+            "Salut, sunt Manole și vă explic cum să vă recuperați despăgubirile după un accident de mașină. Săptămâna aceasta am ajutat 3 clienți să primească peste 50.000 de lei fiecare. Contactați-mă pentru o consultație gratuită!",
+            "Bună ziua! Aici Manole, specialist în despăgubiri auto. Dacă ați avut un accident recent și aveți nevoie de ajutor pentru a obține compensația cuvenită, sunați-mă la 0722-XXX-XXX. Prima consultație este gratuită!",
+            "În ultimele 30 de zile am recuperat peste 200.000 de lei pentru clienții mei. Fiecare caz este unic, dar principiul rămâne același: dreptatea trebuie să preveleze. Sunați-mă să discutăm despre cazul dumneavoastră!",
+            "Accidente de mașină se întâmplă zilnic. Nu lăsați asigurătorii să vă subestimeze! Sunt aici să vă ajut să obțineți suma cuvenită. Experiența mea de 10+ ani în domeniu vorbește de la sine.",
+            "Vă aduceți aminte de accidentul de pe DN1? Am recuperat 75.000 de lei pentru clientul meu. Fără complicații, fără comisioane ascunse. Doar rezultate concrete. Contactați-mă astăzi!"
+        ];
+        
+        function generateRandomPrompt() {
+            const randomIndex = Math.floor(Math.random() * prompts.length);
+            document.getElementById('generatedPrompt').textContent = prompts[randomIndex];
+            return prompts[randomIndex];
+        }
+        
+        async function generateVideo() {
+            const generateBtn = document.getElementById('generateBtn');
+            const status = document.getElementById('status');
+            const videoResult = document.getElementById('videoResult');
+            
+            // Reset UI
+            generateBtn.disabled = true;
+            generateBtn.textContent = '⏳ Se generează...';
+            status.className = 'status processing';
+            status.style.display = 'block';
+            status.innerHTML = '<div class="spinner"></div><p>Se procesează video-ul cu lip-sync...</p>';
+            videoResult.style.display = 'none';
+            
+            // Generate random prompt
+            const prompt = generateRandomPrompt();
+            
+            try {
+                console.log('🚀 Starting video generation...');
+                console.log('Prompt:', prompt);
+                
+                // Create form data
+                const formData = new FormData();
+                formData.append('script', prompt);
+                formData.append('voice_id', 'professional_male'); // ElevenLabs voice ID
+                
+                // Upload Manole image (placeholder for now)
+                const imageFile = await fetch('https://via.placeholder.com/400x400/4ECDC4/white?text=MANOLE')
+                    .then(response => response.blob())
+                    .then(blob => new File([blob], 'manole.png', { type: 'image/png' }));
+                formData.append('avatar_image', imageFile);
+                
+                console.log('📤 Sending request to lipsync endpoint...');
+                
+                // Call lipsync endpoint
+                const response = await fetch('http://localhost:8002/api/video/lipsync-generate', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                console.log('📥 Response received:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                console.log('✅ API Response:', result);
+                
+                if (result.success) {
+                    status.className = 'status success';
+                    status.innerHTML = `
+                        <h4>✅ Video generat cu succes!</h4>
+                        <p><strong>Job ID:</strong> ${result.job_id}</p>
+                        <p><strong>Status:</strong> ${result.status}</p>
+                        <p><strong>Provider:</strong> ${result.provider}</p>
+                        <p><strong>Cost:</strong> ${result.cost} RON</p>
+                        <p>Verificare status: <a href="${result.check_status_url}" target="_blank">${result.check_status_url}</a></p>
+                    `;
+                    
+                    // Poll for job completion
+                    pollJobStatus(result.job_id);
+                } else {
+                    throw new Error(result.error || result.message || 'Failed to generate video');
+                }
+                
+            } catch (error) {
+                console.error('❌ Error:', error);
+                status.className = 'status error';
+                status.innerHTML = `
+                    <h4>❌ Eroare la generarea video-ului</h4>
+                    <p><strong>Detalii:</strong> ${error.message}</p>
+                    <p>Verificați că backend-ul rulează pe localhost:8001</p>
+                `;
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.textContent = '🚀 Generează Video cu Lip-Sync';
+            }
+        }
+        
+        async function pollJobStatus(jobId) {
+            const status = document.getElementById('status');
+            const videoResult = document.getElementById('videoResult');
+            const videoInfo = document.getElementById('videoInfo');
+            
+            const maxAttempts = 30; // 5 minutes max
+            let attempts = 0;
+            
+            const pollInterval = setInterval(async () => {
+                attempts++;
+                
+                try {
+                    console.log(`🔄 Checking job status (attempt ${attempts}/${maxAttempts})...`);
+                    
+                    const response = await fetch(`http://localhost:8002/api/video/job-status/${jobId}`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    const jobStatus = await response.json();
+                    console.log('📊 Job status:', jobStatus);
+                    
+                    if (jobStatus.status === 'completed' && jobStatus.video_url) {
+                        clearInterval(pollInterval);
+                        
+                        status.className = 'status success';
+                        status.innerHTML = `
+                            <h4>🎉 Video finalizat!</h4>
+                            <p>Durata procesare: ${attempts * 10} secunde</p>
+                        `;
+                        
+                        videoResult.style.display = 'block';
+                        const video = document.getElementById('generatedVideo');
+                        video.src = jobStatus.video_url;
+                        
+                        videoInfo.innerHTML = `
+                            <p><strong>🎬 Video generat cu succes!</strong></p>
+                            <p><strong>Durată:</strong> ${jobStatus.duration || 'N/A'}</p>
+                            <p><strong>Mărime:</strong> ${jobStatus.file_size || 'N/A'}</p>
+                            <p><strong>Provider:</strong> ${jobStatus.provider || 'Internal'}</p>
+                        `;
+                        
+                        console.log('✅ Video generation completed successfully!');
+                        
+                    } else if (jobStatus.status === 'failed') {
+                        clearInterval(pollInterval);
+                        
+                        status.className = 'status error';
+                        status.innerHTML = `
+                            <h4>❌ Video generation failed</h4>
+                            <p><strong>Error:</strong> ${jobStatus.error || 'Unknown error'}</p>
+                        `;
+                        
+                    } else {
+                        // Still processing
+                        status.innerHTML = `
+                            <div class="spinner"></div>
+                            <p>Se procesează video-ul... (${attempts * 10}s)</p>
+                            <p><strong>Status:</strong> ${jobStatus.status || 'processing'}</p>
+                        `;
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Error polling job status:', error);
+                    
+                    if (attempts >= maxAttempts) {
+                        clearInterval(pollInterval);
+                        status.className = 'status error';
+                        status.innerHTML = `
+                            <h4>⏰ Timeout</h4>
+                            <p>Video generation is taking longer than expected.</p>
+                            <p>Check manually: <a href="http://localhost:8001/api/video/job-status/${jobId}" target="_blank">Job Status</a></p>
+                        `;
+                    }
+                }
+            }, 10000); // Check every 10 seconds
+        }
+        
+        // Initialize with random prompt
+        window.onload = function() {
+            generateRandomPrompt();
+        };
+    </script>
+</body>
+</html>

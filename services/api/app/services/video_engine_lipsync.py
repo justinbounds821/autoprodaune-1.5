@@ -271,8 +271,8 @@ async def enqueue_lipsync(script: str, voice_id: Optional[str],
     # Start background processing
     async def worker():
         try:
-            set_status(job_id, "processing")
-            
+            set_status(job_id, "processing", progress=10)
+
             # 1. Generate TTS audio
             logger.info(f"Generating TTS for job {job_id}")
             mp3_data = await tts_elevenlabs(script, voice_id)
@@ -289,7 +289,9 @@ async def enqueue_lipsync(script: str, voice_id: Optional[str],
             if avatar_video_url:
                 logger.info(f"Downloading avatar video for job {job_id}")
                 vid_path = await _download_file(avatar_video_url, ".mp4")
-            
+
+            set_status(job_id, "processing", progress=50)
+
             # 3. Run lip-sync generation
             logger.info(f"Starting lip-sync generation for job {job_id} using {BACKEND}")
             if BACKEND == "sadtalker":
@@ -299,7 +301,7 @@ async def enqueue_lipsync(script: str, voice_id: Optional[str],
             
             # 4. Mark as completed
             video_url = f"/api/video/video/heygen/download/{job_id}"
-            set_status(job_id, "completed", 
+            set_status(job_id, "completed", progress=100,
                       video_url=video_url,
                       completed_at=asyncio.get_event_loop().time())
             

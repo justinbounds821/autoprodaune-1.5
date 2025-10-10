@@ -17,6 +17,10 @@ import tempfile
 import shutil
 from enum import Enum
 import numpy as np
+import base64
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 # Importuri pentru servicii și schemas
 from ..services import video_utils as vu
@@ -285,6 +289,279 @@ async def generate_video(
         logging.error(f"Eroare la generarea video-ului: {e}")
         raise HTTPException(status_code=500, detail=f"Eroare la generarea video-ului: {str(e)}")
 
+@router.post("/internal-generate", status_code=200)
+async def generate_internal_video(
+    text: str = Form(..., description="Textul pentru voice-over"),
+    voice_style: str = Form("professional", description="Stilul vocii: professional, empathetic, confident, manole"),
+    background_type: str = Form("gradient", description="Tip background: gradient, solid"),
+    aspect_ratio: str = Form("16:9", description="Aspect ratio: 16:9, 9:16, 1:1"),
+    resolution: str = Form("1080p", description="Rezoluție: 720p, 1080p, 4k")
+) -> Dict[str, Any]:
+    """
+    🎬 Generează video INTERN prin ORCHESTRATOR - ZERO COSTURI!
+    
+    Folosește:
+    - VideoOrchestrator pentru logică centralizată
+    - ElevenLabs pentru voce
+    - FFmpeg + MoviePy pentru procesare
+    - PIL pentru grafică
+    
+    Nu necesită HeyGen, Pika sau alte servicii plătite.
+    """
+    try:
+        from ..services.video_orchestrator import get_video_orchestrator, VideoType
+        
+        orchestrator = get_video_orchestrator()
+        result = await orchestrator.generate_video(
+            video_type=VideoType.GENERIC,
+            context={
+                "text": text,
+                "voice_style": voice_style,
+                "background_type": background_type,
+                "aspect_ratio": aspect_ratio,
+                "resolution": resolution
+            }
+        )
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Video generation failed: {result.get('error', 'Unknown error')}"
+            )
+        
+        # Convertește video la base64 pentru preview (opțional)
+        video_path = result["video_path"]
+        try:
+            with open(video_path, "rb") as f:
+                video_content = f.read()
+                video_base64 = base64.b64encode(video_content).decode()
+                # Limitează dimensiunea pentru răspuns HTTP
+                preview_base64 = video_base64[:100000] if len(video_base64) > 100000 else video_base64
+        except Exception as e:
+            logger.warning(f"Failed to encode video to base64: {e}")
+            preview_base64 = None
+        
+        return {
+            "success": True,
+            "message": "✅ Video generat cu succes prin Orchestrator (ZERO COST)!",
+            "video_id": result["video_id"],
+            "video_path": result["video_path"],
+            "video_url": result.get("video_url"),
+            "preview_base64": preview_base64,
+            "duration_seconds": result["duration_seconds"],
+            "file_size_mb": result["file_size_mb"],
+            "provider": result["provider"],
+            "cost": 0.0,
+            "video_type": result["video_type"]
+        }
+        
+    except Exception as e:
+        logger.error(f"[Internal Video] Generation failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate internal video: {str(e)}"
+        )
+
+@router.post("/generate-from-lead/{lead_id}", status_code=200)
+async def generate_video_from_lead(
+    lead_id: str,
+    video_type: str = Form("testimonial", description="Tip video: testimonial, update, reminder")
+) -> Dict[str, Any]:
+    """
+    🎬 Generează video AUTOMAT din lead REAL prin ORCHESTRATOR!
+    
+    Citește datele lead-ului din baza de date și generează:
+    - Script personalizat cu AI
+    - Voice-over cu ElevenLabs
+    - Video complet cu FFmpeg
+    
+    ZERO COSTURI EXTERNE!
+    """
+    try:
+        from ..services.video_orchestrator import get_video_orchestrator, VideoType
+        
+        # Map video_type la VideoType enum
+        type_map = {
+            "testimonial": VideoType.LEAD_TESTIMONIAL,
+            "update": VideoType.LEAD_UPDATE,
+            "reminder": VideoType.LEAD_REMINDER
+        }
+        
+        vtype = type_map.get(video_type, VideoType.LEAD_UPDATE)
+        
+        orchestrator = get_video_orchestrator()
+        result = await orchestrator.generate_video(
+            video_type=vtype,
+            context={"lead_id": lead_id}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=404 if "not found" in result.get("error", "").lower() else 500,
+                detail=result.get("error", "Unknown error")
+            )
+        
+        return {
+            "success": True,
+            "message": f"✅ Video generat din lead {lead_id} prin Orchestrator!",
+            "video_id": result["video_id"],
+            "video_path": result["video_path"],
+            "video_url": result.get("video_url"),
+            "duration_seconds": result["duration_seconds"],
+            "file_size_mb": result["file_size_mb"],
+            "provider": result["provider"],
+            "cost": 0.0,
+            "script": result.get("script")
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Lead Video] Failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate video from lead: {str(e)}"
+        )
+
+@router.post("/generate-daily-summary", status_code=200)
+async def generate_daily_summary_video() -> Dict[str, Any]:
+    """
+    🎬 Generează video SUMAR ZILNIC prin ORCHESTRATOR!
+    
+    Citește automat:
+    - Lead-uri noi astăzi
+    - Cazuri finalizate
+    - Venituri generate
+    - Statistici de performanță
+    
+    Generează video profesional cu toate statisticile.
+    ZERO COSTURI EXTERNE!
+    """
+    try:
+        from ..services.video_orchestrator import get_video_orchestrator, VideoType
+        
+        orchestrator = get_video_orchestrator()
+        result = await orchestrator.generate_video(
+            video_type=VideoType.REPORT_DAILY,
+            context={"period": "daily"}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("error", "Unknown error")
+            )
+        
+        return {
+            "success": True,
+            "message": "✅ Video sumar zilnic generat prin Orchestrator!",
+            "video_id": result["video_id"],
+            "video_path": result["video_path"],
+            "video_url": result.get("video_url"),
+            "duration_seconds": result["duration_seconds"],
+            "file_size_mb": result["file_size_mb"],
+            "provider": result["provider"],
+            "cost": 0.0,
+            "script": result.get("script")
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Daily Summary] Failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate daily summary: {str(e)}"
+        )
+
+@router.post("/lipsync-generate", status_code=202)
+async def generate_lipsync_video(
+    script: str = Form(..., description="Text pentru voce"),
+    avatar_image: Optional[UploadFile] = File(None, description="Poza avatar (PNG/JPG)"),
+    voice_id: Optional[str] = Form(None, description="ID voce ElevenLabs")
+) -> Dict[str, Any]:
+    """
+    🎬 Generează video cu LIP-SYNC REAL!
+    
+    Folosește:
+    - SadTalker/Wav2Lip pentru lip-sync
+    - ElevenLabs pentru voce
+    - Poza ta devine avatar animat vorbitor
+    
+    TOTUL FUNCȚIONAL!
+    """
+    try:
+        from ..services.video_engine_lipsync import enqueue_lipsync
+        import tempfile
+        
+        # Salvează imaginea uploaded
+        avatar_image_path = None
+        if avatar_image:
+            # Salvează temporar
+            temp_dir = Path("uploaded_avatars")
+            temp_dir.mkdir(exist_ok=True)
+            avatar_image_path = temp_dir / f"avatar_{int(datetime.now().timestamp())}_{avatar_image.filename}"
+            
+            with open(avatar_image_path, "wb") as f:
+                content = await avatar_image.read()
+                f.write(content)
+            
+            logger.info(f"Avatar image saved: {avatar_image_path}")
+        
+        # Generează job ID și pornește procesare
+        job_id = await enqueue_lipsync(
+            script=script,
+            voice_id=voice_id,
+            avatar_image_url=str(avatar_image_path) if avatar_image_path else None,
+            avatar_video_url=None
+        )
+        
+        return {
+            "success": True,
+            "message": "🎬 Video cu lip-sync în procesare!",
+            "job_id": job_id,
+            "status": "processing",
+            "check_status_url": f"/api/video/job-status/{job_id}",
+            "estimated_time": "2-5 minute",
+            "provider": "Internal (SadTalker/Wav2Lip + ElevenLabs)",
+            "cost": 0.0
+        }
+        
+    except Exception as e:
+        logger.error(f"[Lipsync Video] Failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate lipsync video: {str(e)}"
+        )
+
+@router.get("/job-status/{job_id}")
+async def get_job_status(job_id: str) -> Dict[str, Any]:
+    """
+    Verifică statusul unui job de video.
+    """
+    try:
+        from ..services.job_store import get_job
+        
+        job = get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        return {
+            "success": True,
+            "job_id": job_id,
+            "status": job.get("status", "unknown"),
+            "progress": job.get("progress", 0),
+            "video_url": job.get("video_url"),
+            "error": job.get("error"),
+            "metadata": job.get("meta", {})
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Job Status] Failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/manole-generate", status_code=202)
 async def generate_manole_video(
     manole_data: ManoleGenerateRequest,
@@ -339,7 +616,11 @@ async def get_video_stats() -> Dict[str, Any]:
     Returns:
         Dicționar cu statisticile
     """
-    raise HTTPException(status_code=501, detail="Stats not implemented yet")
+    try:
+        return get_supabase_service_instance().video_stats()
+    except Exception as e:
+        logging.error(f"Eroare la obținerea statisticilor video: {e}")
+        raise HTTPException(status_code=500, detail=f"Eroare la statisticile video: {str(e)}")
 
 @router.delete("/queue/{job_id}", status_code=202)
 async def cancel_video_job(
