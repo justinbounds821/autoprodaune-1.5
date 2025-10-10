@@ -2,9 +2,13 @@
 Tests for the leads API endpoints.
 """
 
+import io
+
 import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
+
+from app.routes import leads as leads_routes
 
 
 class TestLeadsAPI:
@@ -191,3 +195,121 @@ class TestLeadsAPI:
         response = client.get("/api/leads/stats")
         # Should handle even if not implemented
         assert response.status_code in [200, 404, 501]
+
+    def test_assign_lead_endpoint(self, client: TestClient, monkeypatch):
+        """Ensure the assignment endpoint stores data and returns success."""
+
+        class StubSupabase:
+            def __init__(self):
+                self.updated_payload = None
+
+            def _table_select(self, table: str, *args, **kwargs):
+                if table == "leads":
+                    return [{"id": "lead-1", "name": "Lead Test", "email": "lead@example.com"}]
+                if table == "lead_assignments":
+                    return []
+                return []
+
+            def _table_update(self, table: str, payload: dict, filters):
+                self.updated_payload = payload
+                return [{"id": "lead-1", **payload}]
+
+            def _table_insert(self, table: str, payload: dict):
+                return {**payload, "id": "assign-1"}
+
+        stub = StubSupabase()
+        monkeypatch.setattr(leads_routes, "get_supabase_service_instance", lambda: stub)
+
+        response = client.post(
+            "/api/leads/lead-1/assign",
+            json={
+                "assigned_to": "Agent X",
+                "assigned_to_email": "agent@example.com",
+                "assigned_by": "admin",
+                "notes": "Preia urgent"
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["assigned_to"] == "Agent X"
+        assert stub.updated_payload["assigned_to"] == "Agent X"
+
+    def test_upload_attachment_endpoint(self, client: TestClient, monkeypatch):
+        """Verify that attachments can be uploaded and metadata is returned."""
+
+        class StubSupabase:
+            def __init__(self):
+                self.attachments = []
+
+            def _table_select(self, table: str, *args, **kwargs):
+                if table == "leads":
+                    return [{"id": "lead-1", "name": "Lead Test", "email": "lead@example.com"}]
+                if table == "lead_assignments":
+                    return []
+                if table == "lead_attachments":
+                    return self.attachments
+                return []
+
+            def _table_update(self, *args, **kwargs):
+                return [{"id": "lead-1"}]
+
+            def _table_insert(self, table: str, payload: dict):
+                record = {**payload, "id": "att-1"}
+                if table == "lead_attachments":
+                    self.attachments.insert(0, record)
+                return record
+
+        stub = StubSupabase()
+        monkeypatch.setattr(leads_routes, "get_supabase_service_instance", lambda: stub)
+        monkeypatch.setattr(
+            leads_routes,
+            "upload_file",
+            lambda *args, **kwargs: "https://example.com/test.txt",
+        )
+
+        response = client.post(
+            "/api/leads/lead-1/attachments",
+            files={"file": ("test.txt", io.BytesIO(b"hello"), "text/plain")},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["file_name"] == "test.txt"
+        assert stub.attachments[0]["file_name"] == "test.txt"
+
+    def test_status_history_endpoint(self, client: TestClient, monkeypatch):
+        """Ensure status history is returned in the expected format."""
+
+        class StubSupabase:
+            def _table_select(self, table: str, *args, **kwargs):
+                if table == "lead_status_history":
+                    return [
+                        {
+                            "id": "hist-1",
+                            "lead_id": "lead-1",
+                            "previous_status": "new",
+                            "new_status": "contacted",
+                            "changed_by": "admin",
+                            "changed_at": "2024-01-01T10:00:00",
+                            "notes": "Sunat clientul",
+                        }
+                    ]
+                if table == "leads":
+                    return [{"id": "lead-1"}]
+                return []
+
+            def _table_update(self, *args, **kwargs):
+                return [{"id": "lead-1"}]
+
+        stub = StubSupabase()
+        monkeypatch.setattr(leads_routes, "get_supabase_service_instance", lambda: stub)
+
+        response = client.get("/api/leads/lead-1/status-history")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["lead_id"] == "lead-1"
+        assert len(data["items"]) == 1
+        assert data["items"][0]["new_status"] == "contacted"

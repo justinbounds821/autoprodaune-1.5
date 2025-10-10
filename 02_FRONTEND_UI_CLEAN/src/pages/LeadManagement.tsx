@@ -40,6 +40,8 @@ import {
   Search,
   Upload,
   Paperclip,
+  History,
+  UserPlus,
   X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -56,9 +58,32 @@ interface Lead {
   updatedAt: string;
   files: string[];
   notes: string[];
-  source: 'website' | 'whatsapp' | 'referral' | 'social_media';
+  source: string;
   assignedTo?: string;
+  assignedToEmail?: string;
+  convertedAt?: string;
+  attachments?: LeadAttachment[];
+  statusHistory?: LeadStatusChange[];
   score?: number; // Lead score (0-100)
+}
+
+interface LeadAttachment {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  contentType?: string;
+  fileSize?: number;
+  uploadedBy?: string;
+  createdAt: string;
+}
+
+interface LeadStatusChange {
+  id: string;
+  previousStatus?: string;
+  newStatus: string;
+  changedAt: string;
+  changedBy?: string;
+  notes?: string;
 }
 
 interface KPIData {
@@ -99,6 +124,14 @@ const LeadManagement: React.FC = () => {
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [addingNote, setAddingNote] = useState(false);
+  const [attachments, setAttachments] = useState<LeadAttachment[]>([]);
+  const [statusHistory, setStatusHistory] = useState<LeadStatusChange[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [assignmentName, setAssignmentName] = useState('');
+  const [assignmentEmail, setAssignmentEmail] = useState('');
+  const [assignmentNotes, setAssignmentNotes] = useState('');
+  const [assigning, setAssigning] = useState(false);
   
   // Bulk operations states
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
@@ -128,7 +161,15 @@ const LeadManagement: React.FC = () => {
             damageType: lead.damage_type || 'Other',
             location: lead.location || '',
             createdAt: lead.created_at,
-            updatedAt: lead.updated_at
+            updatedAt: lead.updated_at,
+            files: lead.files || [],
+            notes: lead.notes || [],
+            source: lead.source || 'unknown',
+            assignedTo: lead.assigned_to || '',
+            assignedToEmail: lead.assigned_to_email || '',
+            convertedAt: lead.converted_at || '',
+            attachments: [],
+            statusHistory: []
           }));
           setLeads(mappedLeads);
         }
@@ -204,11 +245,22 @@ const LeadManagement: React.FC = () => {
       });
 
       if (response.ok) {
+        const result = await response.json();
         setLeads(prev =>
           prev.map(lead =>
-            lead.id === leadId ? { ...lead, status: newStatus, updatedAt: new Date().toISOString() } : lead
+            lead.id === leadId
+              ? {
+                  ...lead,
+                  status: newStatus,
+                  updatedAt: new Date().toISOString(),
+                  convertedAt: result?.data?.converted_at || lead.convertedAt,
+                }
+              : lead
           )
         );
+        if (timelineLeadId === leadId) {
+          await loadStatusHistory(leadId);
+        }
         toast({
           title: "Status actualizat",
           description: "Statusul lead-ului a fost actualizat cu succes."
@@ -237,6 +289,8 @@ const LeadManagement: React.FC = () => {
 
     return matchesSearch && matchesStatus && matchesPriority;
   });
+
+  const currentLead = timelineLeadId ? leads.find(lead => lead.id === timelineLeadId) || null : null;
 
   const handleViewDetails = (lead: Lead) => {
     setSelectedLead(lead);
@@ -283,14 +337,23 @@ const LeadManagement: React.FC = () => {
   const openTimeline = async (leadId: string) => {
     setTimelineLeadId(leadId);
     setShowTimelineModal(true);
-    await loadTimeline(leadId);
+    const lead = leads.find(l => l.id === leadId);
+    setAssignmentName(lead?.assignedTo || '');
+    setAssignmentEmail(lead?.assignedToEmail || '');
+    setAssignmentNotes('');
+    setSelectedFile(null);
+    await Promise.all([
+      loadTimeline(leadId),
+      loadAttachments(leadId),
+      loadStatusHistory(leadId)
+    ]);
   };
 
   const loadTimeline = async (leadId: string) => {
     try {
       setLoadingActivities(true);
       const response = await fetch(`/api/leads/${leadId}/timeline`);
-      
+
       if (response.ok) {
         const data = await response.json();
         setActivities(data.activities || []);
@@ -304,6 +367,49 @@ const LeadManagement: React.FC = () => {
       });
     } finally {
       setLoadingActivities(false);
+    }
+  };
+
+  const loadAttachments = async (leadId: string) => {
+    try {
+      const response = await fetch(`/api/leads/${leadId}/attachments`);
+      if (response.ok) {
+        const data = await response.json();
+        const mapped: LeadAttachment[] = (data.items || []).map((item: any) => ({
+          id: item.id,
+          fileName: item.file_name,
+          fileUrl: item.file_url,
+          contentType: item.content_type,
+          fileSize: item.file_size,
+          uploadedBy: item.uploaded_by,
+          createdAt: item.created_at,
+        }));
+        setAttachments(mapped);
+        setLeads(prev => prev.map(lead => lead.id === leadId ? { ...lead, attachments: mapped } : lead));
+      }
+    } catch (error) {
+      console.error('Failed to load attachments:', error);
+    }
+  };
+
+  const loadStatusHistory = async (leadId: string) => {
+    try {
+      const response = await fetch(`/api/leads/${leadId}/status-history`);
+      if (response.ok) {
+        const data = await response.json();
+        const mapped: LeadStatusChange[] = (data.items || []).map((item: any) => ({
+          id: item.id,
+          previousStatus: item.previous_status,
+          newStatus: item.new_status,
+          changedAt: item.changed_at,
+          changedBy: item.changed_by,
+          notes: item.notes,
+        }));
+        setStatusHistory(mapped);
+        setLeads(prev => prev.map(lead => lead.id === leadId ? { ...lead, statusHistory: mapped } : lead));
+      }
+    } catch (error) {
+      console.error('Failed to load status history:', error);
     }
   };
 
@@ -339,6 +445,101 @@ const LeadManagement: React.FC = () => {
       });
     } finally {
       setAddingNote(false);
+    }
+  };
+
+  const handleAttachmentUpload = async () => {
+    if (!selectedFile || !timelineLeadId) {
+      toast({
+        title: "Fișier lipsă",
+        description: "Selectează un fișier înainte de a încărca.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setUploadingAttachment(true);
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('uploaded_by', 'admin');
+      if (assignmentEmail) {
+        formData.append('notify_emails', assignmentEmail);
+      }
+
+      const response = await fetch(`/api/leads/${timelineLeadId}/attachments`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        setSelectedFile(null);
+        await loadAttachments(timelineLeadId);
+        toast({
+          title: "Atașament încărcat",
+          description: "Fișierul a fost încărcat cu succes.",
+        });
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (error) {
+      console.error('Failed to upload attachment:', error);
+      toast({
+        title: "Eroare la upload",
+        description: "Nu s-a putut încărca fișierul.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const handleAssignmentSubmit = async () => {
+    if (!timelineLeadId || !assignmentName.trim()) {
+      toast({
+        title: "Date incomplete",
+        description: "Introdu numele persoanei către care asignezi lead-ul.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setAssigning(true);
+      const response = await fetch(`/api/leads/${timelineLeadId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assigned_to: assignmentName,
+          assigned_to_email: assignmentEmail || undefined,
+          assigned_by: 'admin',
+          notes: assignmentNotes || undefined,
+        }),
+      });
+
+      if (response.ok) {
+        setLeads(prev => prev.map(lead =>
+          lead.id === timelineLeadId
+            ? { ...lead, assignedTo: assignmentName, assignedToEmail: assignmentEmail }
+            : lead
+        ));
+        await loadTimeline(timelineLeadId);
+        toast({
+          title: "Lead asignat",
+          description: `${assignmentName} a fost notificat despre lead.`,
+        });
+      } else {
+        throw new Error('Assignment failed');
+      }
+    } catch (error) {
+      console.error('Failed to assign lead:', error);
+      toast({
+        title: "Eroare la asignare",
+        description: "Nu s-a putut asigna lead-ul.",
+        variant: "destructive",
+      });
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -954,89 +1155,272 @@ const LeadManagement: React.FC = () => {
 
       {/* Timeline Modal */}
       <Dialog open={showTimelineModal} onOpenChange={setShowTimelineModal}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-blue-500" />
               Activity Timeline
             </DialogTitle>
             <DialogDescription>
-              Historical activities for this lead
+              Gestionează activități, atașamente și istoricul conversiei pentru acest lead
             </DialogDescription>
           </DialogHeader>
 
-          {/* Add Note Form */}
-          <div className="border rounded-lg p-4 bg-blue-50">
-            <label className="text-sm font-medium mb-2 block">Add New Note</label>
-            <Textarea
-              value={newNote}
-              onChange={(e) => setNewNote(e.target.value)}
-              placeholder="Add a note about this lead..."
-              className="mb-2"
-              rows={3}
-            />
-            <Button 
-              onClick={handleAddNote} 
-              disabled={addingNote || !newNote.trim()}
-              size="sm"
-            >
-              {addingNote ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Adding...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Note
-                </>
-              )}
-            </Button>
+          <div className="grid gap-4 md:grid-cols-2 mb-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Informații Lead</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Sursă</span>
+                  <Badge variant="outline">{currentLead?.source || 'necunoscută'}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Status curent</span>
+                  <Badge>{currentLead?.status || 'N/A'}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Asignat către</span>
+                  <span className="font-medium">{assignmentName || 'Neasignat'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Conversie</span>
+                  <span>
+                    {currentLead?.convertedAt
+                      ? new Date(currentLead.convertedAt).toLocaleString('ro-RO')
+                      : 'În curs'}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <UserPlus className="w-4 h-4" />
+                  Asignează lead-ul
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium">Nume responsabil</label>
+                  <Input
+                    value={assignmentName}
+                    onChange={(e) => setAssignmentName(e.target.value)}
+                    placeholder="Ex: Manole Popescu"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Email notificare</label>
+                  <Input
+                    type="email"
+                    value={assignmentEmail}
+                    onChange={(e) => setAssignmentEmail(e.target.value)}
+                    placeholder="responsabil@example.com"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Notițe</label>
+                  <Textarea
+                    value={assignmentNotes}
+                    onChange={(e) => setAssignmentNotes(e.target.value)}
+                    placeholder="Instrucțiuni sau context pentru lead"
+                    rows={3}
+                  />
+                </div>
+                <Button onClick={handleAssignmentSubmit} disabled={assigning}>
+                  {assigning ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Se trimite notificarea...
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Asignează lead
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Activities List */}
-          <div className="space-y-3">
-            {loadingActivities ? (
-              <div className="text-center py-8">
-                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
-                <p className="text-sm text-muted-foreground">Loading timeline...</p>
+          <Card className="mb-4">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Paperclip className="w-4 h-4" />
+                Atașamente
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col md:flex-row md:items-center gap-2">
+                <Input
+                  type="file"
+                  onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+                  className="md:w-2/3"
+                />
+                <Button
+                  onClick={handleAttachmentUpload}
+                  disabled={uploadingAttachment || !selectedFile}
+                  variant="secondary"
+                >
+                  {uploadingAttachment ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Încărcare...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Încarcă fișier
+                    </>
+                  )}
+                </Button>
               </div>
-            ) : activities.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>No activities yet</p>
-              </div>
-            ) : (
-              activities.map((activity, index) => (
-                <div key={activity.id || index} className="flex gap-3 p-3 border rounded-lg">
-                  <div className="flex-shrink-0">
-                    {activity.activity_type === 'note' && <FileText className="w-5 h-5 text-blue-500" />}
-                    {activity.activity_type === 'email' && <Mail className="w-5 h-5 text-green-500" />}
-                    {activity.activity_type === 'call' && <Phone className="w-5 h-5 text-orange-500" />}
-                    {activity.activity_type === 'status_change' && <Activity className="w-5 h-5 text-purple-500" />}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-sm">{activity.title}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(activity.created_at).toLocaleString('ro-RO')}
-                      </span>
+
+              <div className="space-y-3 mt-4">
+                {attachments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nu există atașamente pentru acest lead.</p>
+                ) : (
+                  attachments.map((attachment) => (
+                    <div
+                      key={attachment.id}
+                      className="flex items-center justify-between border rounded-lg p-3"
+                    >
+                      <div>
+                        <p className="font-medium text-sm">{attachment.fileName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Încărcat de {attachment.uploadedBy || 'sistem'} ·{' '}
+                          {new Date(attachment.createdAt).toLocaleString('ro-RO')}
+                        </p>
+                      </div>
+                      <Button asChild variant="outline" size="sm">
+                        <a href={attachment.fileUrl} target="_blank" rel="noreferrer">
+                          <Download className="w-4 h-4 mr-1" /> Descarcă
+                        </a>
+                      </Button>
                     </div>
-                    <p className="text-sm text-muted-foreground">{activity.description}</p>
-                    {activity.performed_by && (
-                      <span className="text-xs text-muted-foreground mt-1 block">
-                        by {activity.performed_by}
-                      </span>
-                    )}
-                  </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <History className="w-4 h-4" />
+                Istoric conversie
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {statusHistory.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nu există modificări de status înregistrate.</p>
+              ) : (
+                <div className="space-y-3">
+                  {statusHistory.map((item) => (
+                    <div key={item.id} className="border rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">
+                          {item.previousStatus ? `${item.previousStatus} → ${item.newStatus}` : item.newStatus}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {item.changedAt ? new Date(item.changedAt).toLocaleString('ro-RO') : ''}
+                        </span>
+                      </div>
+                      {item.notes && (
+                        <p className="text-xs text-muted-foreground mt-1">{item.notes}</p>
+                      )}
+                      {item.changedBy && (
+                        <p className="text-xs text-muted-foreground mt-1">Modificat de {item.changedBy}</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))
-            )}
-          </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Activități și notițe</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Adaugă o nouă notă</label>
+                <Textarea
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  placeholder="Adaugă o notă despre lead..."
+                  className="mb-2"
+                  rows={3}
+                />
+                <Button
+                  onClick={handleAddNote}
+                  disabled={addingNote || !newNote.trim()}
+                  size="sm"
+                >
+                  {addingNote ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Se salvează...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Adaugă notă
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {loadingActivities ? (
+                  <div className="text-center py-8">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
+                    <p className="text-sm text-muted-foreground">Se încarcă timeline-ul...</p>
+                  </div>
+                ) : activities.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>Nu există activități înregistrate</p>
+                  </div>
+                ) : (
+                  activities.map((activity, index) => (
+                    <div key={activity.id || index} className="flex gap-3 p-3 border rounded-lg">
+                      <div className="flex-shrink-0">
+                        {activity.activity_type === 'note' && <FileText className="w-5 h-5 text-blue-500" />}
+                        {activity.activity_type === 'email' && <Mail className="w-5 h-5 text-green-500" />}
+                        {activity.activity_type === 'call' && <Phone className="w-5 h-5 text-orange-500" />}
+                        {activity.activity_type === 'status_change' && <Activity className="w-5 h-5 text-purple-500" />}
+                        {activity.activity_type === 'attachment' && <Paperclip className="w-5 h-5 text-slate-500" />}
+                        {activity.activity_type === 'assignment' && <UserPlus className="w-5 h-5 text-emerald-500" />}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-sm">{activity.title}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(activity.created_at).toLocaleString('ro-RO')}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{activity.description}</p>
+                        {activity.performed_by && (
+                          <span className="text-xs text-muted-foreground mt-1 block">
+                            de {activity.performed_by}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowTimelineModal(false)}>
-              Close
+              Închide
             </Button>
           </DialogFooter>
         </DialogContent>

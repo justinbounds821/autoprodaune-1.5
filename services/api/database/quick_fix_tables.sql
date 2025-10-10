@@ -192,6 +192,48 @@ CREATE TRIGGER update_whatsapp_conversations_updated_at BEFORE UPDATE ON whatsap
 CREATE TRIGGER update_content_templates_updated_at BEFORE UPDATE ON content_templates
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- 6. lead_attachments + lead history tables
+CREATE TABLE IF NOT EXISTS lead_attachments (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    file_name TEXT NOT NULL,
+    file_url TEXT NOT NULL,
+    storage_key TEXT,
+    content_type TEXT,
+    file_size BIGINT,
+    uploaded_by TEXT,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lead_attachments_lead_id ON lead_attachments(lead_id);
+CREATE INDEX IF NOT EXISTS idx_lead_attachments_created_at ON lead_attachments(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS lead_status_history (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    previous_status TEXT,
+    new_status TEXT NOT NULL,
+    changed_by TEXT,
+    notes TEXT,
+    changed_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lead_status_history_lead_id ON lead_status_history(lead_id);
+CREATE INDEX IF NOT EXISTS idx_lead_status_history_changed_at ON lead_status_history(changed_at DESC);
+
+CREATE TABLE IF NOT EXISTS lead_assignments (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    assigned_to TEXT NOT NULL,
+    assigned_to_email TEXT,
+    assigned_by TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lead_assignments_lead_id ON lead_assignments(lead_id);
+
 -- Success message
 DO $$
 BEGIN
