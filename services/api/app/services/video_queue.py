@@ -303,7 +303,7 @@ class VideoQueue:
             
             # Importă serviciul corespunzător
             if job.provider == VideoProvider.PIKA:
-                from services.pika_service import get_pika_service, PikaVideoRequest, VideoStyle, VideoAspectRatio
+                from app.services.pika_service import get_pika_service, PikaVideoRequest, VideoStyle, VideoAspectRatio
                 
                 service = get_pika_service()
                 
@@ -322,7 +322,7 @@ class VideoQueue:
                 result = await service.generate_video(request)
                 
             elif job.provider == VideoProvider.HEYGEN:
-                from services.heygen_service import get_heygen_service, HeyGenVideoRequest, HeyGenVideoStyle, HeyGenVideoQuality
+                from app.services.heygen_service import get_heygen_service, HeyGenVideoRequest, HeyGenVideoStyle, HeyGenVideoQuality
                 
                 service = get_heygen_service()
                 

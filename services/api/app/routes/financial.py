@@ -9,10 +9,13 @@ Acest modul implementează endpoint-urile REST pentru:
 """
 
 import logging
+import uuid
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, Body, Form
+
+logger = logging.getLogger(__name__)
 
 from ..database import get_db
 from ..models import CampaignMetrics
@@ -48,6 +51,142 @@ router = APIRouter(
 
 
 # ==================== ENDPOINT-URI PENTRU TRACKING ====================
+
+@router.get("/revenue")
+async def get_revenue_data(
+    period: str = Query("7d", description="Time period (1d, 7d, 30d, 90d)")
+) -> Dict[str, Any]:
+    """
+    Get revenue data for specified period.
+    
+    Args:
+        period: Time period for revenue data
+        
+    Returns:
+        Revenue data and breakdown
+    """
+    try:
+        supabase = get_supabase_service_instance()
+        
+        # Calculate date range
+        end_date = datetime.now()
+        if period == "1d":
+            start_date = end_date - timedelta(days=1)
+        elif period == "7d":
+            start_date = end_date - timedelta(days=7)
+        elif period == "30d":
+            start_date = end_date - timedelta(days=30)
+        elif period == "90d":
+            start_date = end_date - timedelta(days=90)
+        else:
+            start_date = end_date - timedelta(days=7)
+        
+        start_date_str = start_date.isoformat().split('T')[0]
+        end_date_str = end_date.isoformat().split('T')[0]
+        
+        # Get revenues from database
+        revenues = supabase._table_select(
+            "revenues",
+            "*",
+            [
+                ("gte", "created_at", start_date_str),
+                ("lte", "created_at", end_date_str)
+            ]
+        )
+        
+        # Calculate totals
+        total = sum(r.get("amount", 0) for r in revenues)
+        
+        # Daily breakdown
+        breakdown = []
+        current_date = start_date
+        while current_date <= end_date:
+            date_str = current_date.isoformat().split('T')[0]
+            daily_revenues = [r for r in revenues if r.get("created_at", "").startswith(date_str)]
+            daily_total = sum(r.get("amount", 0) for r in daily_revenues)
+            
+            breakdown.append({
+                "date": date_str,
+                "amount": daily_total
+            })
+            
+            current_date += timedelta(days=1)
+        
+        return {
+            "total": total,
+            "period": period,
+            "breakdown": breakdown,
+            "currency": "RON"
+        }
+        
+    except Exception as e:
+        logging.error(f"Error getting revenue data: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get revenue data: {str(e)}")
+
+
+@router.get("/costs")
+async def get_costs_data(
+    period: str = Query("7d", description="Time period (1d, 7d, 30d, 90d)")
+) -> Dict[str, Any]:
+    """
+    Get costs data for specified period.
+    
+    Args:
+        period: Time period for costs data
+        
+    Returns:
+        Costs data and breakdown by category
+    """
+    try:
+        supabase = get_supabase_service_instance()
+        
+        # Calculate date range
+        end_date = datetime.now()
+        if period == "1d":
+            start_date = end_date - timedelta(days=1)
+        elif period == "7d":
+            start_date = end_date - timedelta(days=7)
+        elif period == "30d":
+            start_date = end_date - timedelta(days=30)
+        elif period == "90d":
+            start_date = end_date - timedelta(days=90)
+        else:
+            start_date = end_date - timedelta(days=7)
+        
+        start_date_str = start_date.isoformat().split('T')[0]
+        end_date_str = end_date.isoformat().split('T')[0]
+        
+        # Get costs from database
+        costs = supabase._table_select(
+            "api_costs",
+            "*",
+            [
+                ("gte", "created_at", start_date_str),
+                ("lte", "created_at", end_date_str)
+            ]
+        )
+        
+        # Calculate totals
+        total = sum(c.get("amount", 0) for c in costs)
+        
+        # Breakdown by category
+        breakdown = {
+            "api_costs": sum(c.get("amount", 0) for c in costs if c.get("provider") in ["openai", "heygen", "elevenlabs", "pika"]),
+            "infrastructure": sum(c.get("amount", 0) for c in costs if c.get("provider") in ["cloudflare", "supabase", "redis"]),
+            "marketing": sum(c.get("amount", 0) for c in costs if c.get("provider") in ["tiktok", "instagram", "facebook"])
+        }
+        
+        return {
+            "total": total,
+            "period": period,
+            "breakdown": breakdown,
+            "currency": "RON"
+        }
+        
+    except Exception as e:
+        logging.error(f"Error getting costs data: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get costs data: {str(e)}")
+
 
 @router.post("/track-cost", response_model=Dict[str, Any])
 async def track_api_cost(
