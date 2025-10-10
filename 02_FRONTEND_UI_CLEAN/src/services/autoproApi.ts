@@ -46,6 +46,10 @@ class AutoProApiService {
   createLead = async (lead: any) => (await api.post("/api/leads", lead)).data;
   getFinancialDashboard = async (params?: any) =>
     (await api.get("/api/financial/dashboard", { params })).data;
+  getFinancialBreakdown = async (params?: any) =>
+    (await api.get("/api/financial/breakdown", { params })).data;
+  getFinancialForecast = async (params?: any) =>
+    (await api.get("/api/financial/forecast", { params })).data;
   getInvoices = async () => (await api.get("/api/financial/invoices")).data;
   createInvoice = async (invoice: any) =>
     (await api.post("/api/financial/invoices", invoice)).data;
@@ -84,6 +88,17 @@ class AutoProApiService {
   triggerAutomation = async () => (await api.post("/api/automation/trigger")).data;
   getRevenueData = async () => (await api.get("/api/financial/revenue")).data;
   getCostData = async () => (await api.get("/api/financial/costs")).data;
+  getProfitLoss = async (params: any) =>
+    (await api.get("/api/financial/profit-loss", { params })).data;
+  listCostCategories = async () => (await api.get("/api/financial/cost-categories")).data;
+  createCostCategory = async (payload: any) =>
+    (await api.post("/api/financial/cost-categories", payload)).data;
+  updateCostCategory = async (slug: string, payload: any) =>
+    (await api.put(`/api/financial/cost-categories/${slug}`, payload)).data;
+  deleteCostCategory = async (slug: string) =>
+    (await api.delete(`/api/financial/cost-categories/${slug}`)).data;
+  exportInvoice = async (invoiceId: string, format: 'pdf' | 'json' = 'pdf') =>
+    (await api.get(`/api/financial/invoices/${invoiceId}/export`, { params: { format }, responseType: 'blob' })).data;
   getSocialPosts = async () => (await api.get("/api/social/posts")).data;
   getPostAnalytics = async () => (await api.get("/api/social/analytics")).data;
   createPost = async (post: any) => (await api.post("/api/social/posts", post)).data;

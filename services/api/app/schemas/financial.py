@@ -8,7 +8,69 @@ pentru endpoint-urile API financiare.
 from datetime import datetime, date as Date
 from decimal import Decimal
 from typing import Optional, Dict, Any, List
+
 from pydantic import BaseModel, Field, validator, model_validator
+
+
+# ==================== SCHEME GENERALE ====================
+
+class FinancialTimelinePoint(BaseModel):
+    date: str = Field(..., description="Data în format YYYY-MM-DD")
+    revenue: float
+    costs: float
+    profit: float
+    cumulative_profit: Optional[float] = None
+
+
+class BreakdownCostItem(BaseModel):
+    id: Optional[Any] = None
+    provider: Optional[str] = None
+    operation: Optional[str] = None
+    category: Optional[str] = None
+    amount: float
+    timestamp: Optional[str] = None
+
+
+class BreakdownRevenueItem(BaseModel):
+    id: Optional[Any] = None
+    source: Optional[str] = None
+    category: Optional[str] = None
+    amount: float
+    timestamp: Optional[str] = None
+
+
+class ProfitabilitySummary(BaseModel):
+    net_profit: float
+    roi: float
+    profit_margin: float
+
+
+class FinancialBreakdownResponse(BaseModel):
+    period: str
+    start_date: Optional[Date]
+    end_date: Optional[Date]
+    costs: Dict[str, Any]
+    revenue: Dict[str, Any]
+    timeline: List[FinancialTimelinePoint]
+    profitability: ProfitabilitySummary
+
+
+class ForecastEntry(BaseModel):
+    revenue: float
+    costs: float
+    profit: float
+    trend: str
+
+
+class FinancialForecastResponse(BaseModel):
+    period: str
+    start_date: Optional[Date]
+    end_date: Optional[Date]
+    averages: Dict[str, float]
+    growth_rates: Dict[str, float]
+    forecasts: Dict[str, ForecastEntry]
+    confidence: float
+    series: List[FinancialTimelinePoint]
 
 
 # ==================== SCHEME DE BAZĂ ====================
@@ -251,6 +313,36 @@ class BudgetAlertResponse(BaseModel):
         from_attributes = True
 
 
+# ==================== SCHEME PENTRU CATEGORII DE COST ====================
+
+class CostCategory(BaseModel):
+    slug: str
+    name: str
+    description: Optional[str] = None
+    budget_cap: Optional[Decimal] = None
+    color: Optional[str] = None
+    is_default: Optional[bool] = False
+
+
+class CostCategoryCreate(BaseModel):
+    name: str = Field(..., description="Numele categoriei")
+    description: Optional[str] = Field(None, description="Descriere scurtă")
+    budget_cap: Optional[Decimal] = Field(None, description="Bugetul alocat")
+    color: Optional[str] = Field(None, description="Codul de culoare hex")
+    slug: Optional[str] = Field(None, description="Identificator unic (opțional)")
+
+
+class CostCategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    budget_cap: Optional[Decimal] = None
+    color: Optional[str] = None
+
+
+class CostCategoryAssignment(BaseModel):
+    category_slug: str = Field(..., min_length=1, description="Slug-ul categoriei de cost")
+
+
 # ==================== SCHEME PENTRU DASHBOARD ====================
 
 class FinancialDashboardResponse(BaseModel):
@@ -277,15 +369,24 @@ class FinancialDashboardResponse(BaseModel):
     cost_trend: str  # "up", "down", "stable"
     revenue_trend: str
     profit_trend: str
-    
+
     # Alerte active
     active_alerts: List[BudgetAlertResponse]
-    
+
     # Top costuri
     top_cost_providers: List[Dict[str, Any]]
-    
+
     # Top surse de venit
     top_revenue_sources: List[Dict[str, Any]]
+
+    # Breakdown detaliat
+    timeline: List[FinancialTimelinePoint] = Field(default_factory=list)
+    cost_breakdown: Dict[str, Any] = Field(default_factory=dict)
+    revenue_breakdown: Dict[str, Any] = Field(default_factory=dict)
+    profit_margin: Decimal = Field(0, description="Marja de profit")
+    average_daily_profit: Decimal = Field(0, description="Profitul mediu zilnic")
+    cost_categories: Dict[str, Decimal] = Field(default_factory=dict)
+    revenue_categories: Dict[str, Decimal] = Field(default_factory=dict)
 
 
 class ROIAnalysisRequest(BaseModel):
@@ -325,11 +426,12 @@ class ROIAnalysisResponse(BaseModel):
     total_revenue: Decimal
     net_profit: Decimal
     roi_percentage: Decimal
-    
+
     # Metrici detaliate
-    cost_breakdown: Dict[str, Decimal]
-    revenue_breakdown: Dict[str, Decimal]
-    
+    cost_breakdown: Dict[str, Any]
+    revenue_breakdown: Dict[str, Any]
+    timeline: List[FinancialTimelinePoint] = Field(default_factory=list)
+
     # Comparații cu perioada anterioară
     cost_change_percentage: Decimal
     revenue_change_percentage: Decimal
@@ -363,27 +465,31 @@ class ProfitLossRequest(BaseModel):
 
 class ProfitLossResponse(BaseModel):
     """Schema pentru răspunsul cu analiza profit/pierdere."""
-    start_date: Date
-    end_date: Date
-    
+    period: str
+    start_date: Optional[Date]
+    end_date: Optional[Date]
+
     # Totale
     total_costs: Decimal
     total_revenue: Decimal
     net_profit: Decimal
     roi_percentage: Decimal
-    
-    # Breakdown zilnic
-    daily_metrics: List[Dict[str, Any]]
-    
+
+    # Breakdown detaliat
+    cost_breakdown: Dict[str, Any]
+    revenue_breakdown: Dict[str, Any]
+    daily_metrics: List[FinancialTimelinePoint]
+
     # Breakdown pe categorii
     cost_categories: Dict[str, Decimal]
     revenue_categories: Dict[str, Decimal]
-    
+
     # Statistici
     avg_daily_profit: Decimal
     best_day_profit: Decimal
     worst_day_profit: Decimal
     profit_volatility: Decimal
+    recommendations: List[str] = Field(default_factory=list)
 
 
 # ==================== SCHEME PENTRU BULK OPERATIONS ====================
@@ -446,6 +552,7 @@ class FinancialStatsResponse(BaseModel):
 class ExportRequest(BaseModel):
     """Schema pentru cererea de export date financiare."""
     format: str = Field(..., description="Formatul de export: 'csv', 'excel', 'json'")
+    period: Optional[str] = Field("30d", description="Perioada presetată pentru export")
     start_date: Optional[Date] = Field(None, description="Data de început")
     end_date: Optional[Date] = Field(None, description="Data de sfârșit")
     include_costs: bool = Field(True, description="Include costurile")
@@ -459,6 +566,12 @@ class ExportRequest(BaseModel):
         if v.lower() not in valid_formats:
             raise ValueError(f'Format invalid: {v}. Formate valide: {valid_formats}')
         return v.lower()
+
+    @model_validator(mode='after')
+    def validate_inclusions(self):
+        if not any([self.include_costs, self.include_revenue, self.include_metrics]):
+            raise ValueError('Trebuie selectată cel puțin o categorie pentru export')
+        return self
 
 
 class ExportResponse(BaseModel):

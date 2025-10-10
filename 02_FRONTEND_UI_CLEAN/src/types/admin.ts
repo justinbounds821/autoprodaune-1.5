@@ -52,6 +52,71 @@ export interface FinancialData {
   end_date?: string;
 }
 
+export interface FinancialTimelinePoint {
+  date: string;
+  revenue: number;
+  costs: number;
+  profit: number;
+  cumulative_profit?: number;
+}
+
+export interface FinancialBreakdown {
+  period: string;
+  start_date?: string;
+  end_date?: string;
+  costs: {
+    total: number;
+    by_category: Record<string, number>;
+    by_provider: Record<string, number>;
+    top: Array<{
+      id?: number | string;
+      provider?: string;
+      operation?: string;
+      category?: string;
+      amount: number;
+      timestamp?: string;
+    }>;
+  };
+  revenue: {
+    total: number;
+    by_category: Record<string, number>;
+    by_source: Record<string, number>;
+    top: Array<{
+      id?: number | string;
+      source?: string;
+      category?: string;
+      amount: number;
+      timestamp?: string;
+    }>;
+  };
+  timeline: FinancialTimelinePoint[];
+  profitability: {
+    net_profit: number;
+    roi: number;
+    profit_margin: number;
+  };
+}
+
+export interface FinancialForecast {
+  period: string;
+  start_date?: string;
+  end_date?: string;
+  averages: Record<string, number>;
+  growth_rates: Record<string, number>;
+  forecasts: Record<string, { revenue: number; costs: number; profit: number; trend: string }>;
+  confidence: number;
+  series: FinancialTimelinePoint[];
+}
+
+export interface CostCategory {
+  slug: string;
+  name: string;
+  description?: string;
+  budget_cap?: number | string;
+  color?: string;
+  is_default?: boolean;
+}
+
 export interface LeadDetails {
   id: string;
   name: string;

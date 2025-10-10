@@ -1,39 +1,116 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DollarSign, TrendingUp, TrendingDown, Target, PieChart as PieChartIcon, BarChart3, Download, RefreshCw, Calendar } from 'lucide-react';
+import {
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  Target,
+  PieChart as PieChartIcon,
+  BarChart3,
+  Download,
+  RefreshCw,
+  Calendar,
+  Calculator,
+  FileText,
+  LineChart as LineChartIcon,
+  Layers,
+} from 'lucide-react';
 import AutoProApiService from '@/services/autoproApi';
-import { FinancialData, Revenue, Cost } from '@/types/admin';
+import {
+  FinancialData,
+  Revenue,
+  Cost,
+  FinancialBreakdown,
+  FinancialForecast,
+  FinancialTimelinePoint,
+  CostCategory,
+} from '@/types/admin';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { Bar, BarChart, Line, LineChart, Pie, PieChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
+import {
+  Bar,
+  BarChart,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Cell,
+} from 'recharts';
 import { useToast } from '@/hooks/use-toast';
+import { RecurringRevenueManager, MRRReport } from '@/components/recurring-revenue/RecurringRevenueManager';
 
 const FinancialDashboard: React.FC = () => {
   const { toast } = useToast();
   const [financialData, setFinancialData] = useState<FinancialData | null>(null);
   const [revenueData, setRevenueData] = useState<Revenue[]>([]);
   const [costData, setCostData] = useState<Cost[]>([]);
+  const [breakdownData, setBreakdownData] = useState<FinancialBreakdown | null>(null);
+  const [forecastData, setForecastData] = useState<FinancialForecast | null>(null);
+  const [profitLossData, setProfitLossData] = useState<any>(null);
+  const [costCategories, setCostCategories] = useState<CostCategory[]>([]);
+  const [newCategory, setNewCategory] = useState({
+    name: '',
+    description: '',
+    budget_cap: '',
+    color: '#2563eb',
+  });
+  const [mrrReport, setMrrReport] = useState<MRRReport | null>(null);
+  const recurringManager = useMemo(() => new RecurringRevenueManager(), []);
+  const [taxSummary, setTaxSummary] = useState({
+    vat: 0,
+    corporate: 0,
+    profitAfterTax: 0,
+  });
+  const [invoiceExportId, setInvoiceExportId] = useState('');
+  const [invoiceExportFormat, setInvoiceExportFormat] = useState<'pdf' | 'json'>('pdf');
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [isExportingInvoice, setIsExportingInvoice] = useState(false);
   const [loading, setLoading] = useState(true);
-  
+
   // Date range state
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedPreset, setSelectedPreset] = useState('7d');
 
   useEffect(() => {
-    loadFinancialData();
-    loadRevenueData();
-    loadCostData();
+    loadAllData();
   }, [selectedPreset, dateFrom, dateTo]);
+
+  useEffect(() => {
+    recurringManager
+      .loadSubscriptions()
+      .then(() => setMrrReport(recurringManager.generateMRRReport(selectedPreset.toUpperCase())))
+      .catch((error) => console.error('Failed to load subscriptions:', error));
+  }, [recurringManager, selectedPreset]);
+
+  useEffect(() => {
+    if (!financialData) {
+      setTaxSummary({ vat: 0, corporate: 0, profitAfterTax: 0 });
+      return;
+    }
+
+    const revenue = financialData.total_revenue ?? financialData.revenue ?? 0;
+    const costs = financialData.total_costs ?? financialData.costs ?? 0;
+    const profit = financialData.net_profit ?? financialData.profit ?? 0;
+    const vatDue = Math.max((revenue - costs) * 0.19, 0);
+    const corporateTax = profit > 0 ? profit * 0.16 : 0;
+    setTaxSummary({
+      vat: Math.round(vatDue * 100) / 100,
+      corporate: Math.round(corporateTax * 100) / 100,
+      profitAfterTax: Math.round((profit - vatDue - corporateTax) * 100) / 100,
+    });
+  }, [financialData]);
 
   const loadFinancialData = async () => {
     try {
-      setLoading(true);
-      
-      // Build query params
       const params = new URLSearchParams();
       if (dateFrom && dateTo) {
         params.append('date_from', dateFrom);
@@ -42,7 +119,7 @@ const FinancialDashboard: React.FC = () => {
       } else {
         params.append('period', selectedPreset);
       }
-      
+
       const response = await fetch(`/api/financial/dashboard?${params.toString()}`);
       const data = await response.json();
 
@@ -75,8 +152,6 @@ const FinancialDashboard: React.FC = () => {
         description: "Nu s-au putut încărca datele financiare.",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -108,12 +183,179 @@ const FinancialDashboard: React.FC = () => {
     }
   };
 
+  const buildPeriodParams = () => {
+    const params: Record<string, string> = {};
+    if (dateFrom && dateTo) {
+      params.date_from = dateFrom;
+      params.date_to = dateTo;
+      params.period = 'custom';
+    } else {
+      params.period = selectedPreset;
+    }
+    return params;
+  };
+
+  const loadBreakdownData = async () => {
+    try {
+      const response = await AutoProApiService.getFinancialBreakdown(buildPeriodParams());
+      setBreakdownData(response);
+    } catch (error) {
+      console.error('Failed to load breakdown data:', error);
+    }
+  };
+
+  const loadForecastData = async () => {
+    try {
+      const response = await AutoProApiService.getFinancialForecast(buildPeriodParams());
+      setForecastData(response);
+    } catch (error) {
+      console.error('Failed to load forecast data:', error);
+    }
+  };
+
+  const loadProfitLossData = async () => {
+    try {
+      const params: Record<string, string> = {};
+      if (dateFrom && dateTo) {
+        params.start_date = dateFrom;
+        params.end_date = dateTo;
+      } else {
+        const now = new Date();
+        const start = new Date();
+        const presetDays = selectedPreset.endsWith('d') ? parseInt(selectedPreset.replace('d', ''), 10) : 30;
+        start.setDate(now.getDate() - (isNaN(presetDays) ? 30 : presetDays));
+        params.start_date = start.toISOString().split('T')[0];
+        params.end_date = now.toISOString().split('T')[0];
+      }
+      const response = await AutoProApiService.getProfitLoss(params);
+      setProfitLossData(response);
+    } catch (error) {
+      console.error('Failed to load profit/loss data:', error);
+    }
+  };
+
+  const loadCostCategoryData = async () => {
+    try {
+      const response = await AutoProApiService.listCostCategories();
+      setCostCategories(response);
+    } catch (error) {
+      console.error('Failed to load cost categories:', error);
+    }
+  };
+
+  const loadAllData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        loadFinancialData(),
+        loadRevenueData(),
+        loadCostData(),
+        loadBreakdownData(),
+        loadForecastData(),
+        loadProfitLossData(),
+        loadCostCategoryData(),
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const refreshAllData = async () => {
-    await Promise.all([
-      loadFinancialData(),
-      loadRevenueData(),
-      loadCostData()
-    ]);
+    await loadAllData();
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategory.name.trim()) {
+      toast({
+        title: 'Completează numele categoriei',
+        description: 'Numele categoriei este obligatoriu pentru salvare.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsSavingCategory(true);
+      const payload: any = {
+        name: newCategory.name,
+        description: newCategory.description || undefined,
+        color: newCategory.color || undefined,
+      };
+      if (newCategory.budget_cap) {
+        payload.budget_cap = parseFloat(newCategory.budget_cap);
+      }
+
+      const response = await AutoProApiService.createCostCategory(payload);
+      setCostCategories((prev) => [response, ...prev.filter((cat) => cat.slug !== response.slug)]);
+      setNewCategory({ name: '', description: '', budget_cap: '', color: '#2563eb' });
+      toast({ title: 'Categorie salvată', description: `Categoria ${response.name} a fost creată.` });
+    } catch (error) {
+      console.error('Failed to save category:', error);
+      toast({
+        title: 'Eroare',
+        description: 'Nu s-a putut salva categoria.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
+  const handleDeleteCategory = async (slug: string, isDefault?: boolean) => {
+    if (isDefault) {
+      toast({
+        title: 'Categorie implicită',
+        description: 'Categoriile implicite nu pot fi șterse.',
+      });
+      return;
+    }
+
+    try {
+      await AutoProApiService.deleteCostCategory(slug);
+      setCostCategories((prev) => prev.filter((cat) => cat.slug !== slug));
+      toast({ title: 'Categorie ștearsă', description: 'Categoria a fost eliminată.' });
+    } catch (error) {
+      console.error('Failed to delete category:', error);
+      toast({
+        title: 'Eroare',
+        description: 'Nu s-a putut șterge categoria.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleInvoiceExport = async () => {
+    if (!invoiceExportId.trim()) {
+      toast({
+        title: 'ID factură necesar',
+        description: 'Introduceți un ID de factură valid pentru export.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsExportingInvoice(true);
+      const blob = await AutoProApiService.exportInvoice(invoiceExportId, invoiceExportFormat);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `invoice-${invoiceExportId}.${invoiceExportFormat}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast({ title: 'Factură exportată', description: `Factura ${invoiceExportId} a fost descărcată.` });
+    } catch (error) {
+      console.error('Failed to export invoice:', error);
+      toast({
+        title: 'Eroare',
+        description: 'Nu s-a putut exporta factura.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExportingInvoice(false);
+    }
   };
 
   const exportFinancialReport = async () => {
@@ -124,7 +366,7 @@ const FinancialDashboard: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          period: 'current_month',
+          period: selectedPreset,
           format: 'csv'
         }),
       });
@@ -235,6 +477,11 @@ const FinancialDashboard: React.FC = () => {
   };
 
   const costBreakdown = getCostBreakdown();
+  const timelineData: FinancialTimelinePoint[] = useMemo(() => breakdownData?.timeline ?? [], [breakdownData]);
+  const costCategoryEntries = useMemo(() => Object.entries(breakdownData?.costs?.by_category ?? {}), [breakdownData]);
+  const revenueCategoryEntries = useMemo(() => Object.entries(breakdownData?.revenue?.by_category ?? {}), [breakdownData]);
+  const forecastSeries = useMemo(() => forecastData?.series ?? [], [forecastData]);
+  const categoryPalette = ['#2563eb', '#f97316', '#16a34a', '#9333ea', '#0ea5e9', '#facc15'];
 
   if (loading) {
     return (
@@ -337,6 +584,7 @@ const FinancialDashboard: React.FC = () => {
           <TabsTrigger value="revenue">Venituri</TabsTrigger>
           <TabsTrigger value="costs">Costuri</TabsTrigger>
           <TabsTrigger value="analysis">Analize</TabsTrigger>
+          <TabsTrigger value="categories">Categorii Cost</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -480,6 +728,136 @@ const FinancialDashboard: React.FC = () => {
                   <p className="text-sm text-gray-600">Multiplicator Venituri</p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="categories" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Adaugă categorie de cost</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Input
+                  placeholder="Nume categorie"
+                  value={newCategory.name}
+                  onChange={(e) => setNewCategory((prev) => ({ ...prev, name: e.target.value }))}
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="Buget (RON)"
+                  value={newCategory.budget_cap}
+                  onChange={(e) => setNewCategory((prev) => ({ ...prev, budget_cap: e.target.value }))}
+                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="color"
+                    value={newCategory.color}
+                    onChange={(e) => setNewCategory((prev) => ({ ...prev, color: e.target.value }))}
+                    className="h-10"
+                  />
+                  <span className="text-sm text-gray-500">Culoare</span>
+                </div>
+                <Button onClick={handleCreateCategory} disabled={isSavingCategory}>
+                  {isSavingCategory ? 'Se salvează...' : 'Adaugă categorie'}
+                </Button>
+              </div>
+              <Textarea
+                placeholder="Descriere (opțional)"
+                value={newCategory.description}
+                onChange={(e) => setNewCategory((prev) => ({ ...prev, description: e.target.value }))}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Categorii existente</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {costCategories.length > 0 ? (
+                costCategories.map((category) => {
+                  const allocated = breakdownData?.costs?.by_category?.[category.name] ?? 0;
+                  const budget = category.budget_cap ? Number(category.budget_cap) : undefined;
+                  const usage = budget ? Math.min((allocated / budget) * 100, 100) : 0;
+                  return (
+                    <div key={category.slug} className="border rounded-lg p-4 flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: category.color || '#2563eb' }}
+                            />
+                            <h4 className="font-semibold">{category.name}</h4>
+                          </div>
+                          {category.description && (
+                            <p className="text-sm text-gray-500 mt-1">{category.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-500">
+                            {budget ? `${Math.round(usage)}% din ${formatCurrency(budget)}` : 'Fără buget setat'}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteCategory(category.slug, category.is_default)}
+                          >
+                            Șterge
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${budget ? usage : 100}%`, backgroundColor: category.color || '#2563eb' }}
+                        />
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        Costuri înregistrate: <span className="font-medium">{formatCurrency(allocated)}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-gray-500">Nu există categorii definite încă.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Export factură</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Input
+                  placeholder="ID factură"
+                  value={invoiceExportId}
+                  onChange={(e) => setInvoiceExportId(e.target.value)}
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={invoiceExportFormat === 'pdf' ? 'default' : 'outline'}
+                    onClick={() => setInvoiceExportFormat('pdf')}
+                  >
+                    PDF
+                  </Button>
+                  <Button
+                    variant={invoiceExportFormat === 'json' ? 'default' : 'outline'}
+                    onClick={() => setInvoiceExportFormat('json')}
+                  >
+                    JSON
+                  </Button>
+                </div>
+                <Button onClick={handleInvoiceExport} disabled={isExportingInvoice}>
+                  {isExportingInvoice ? 'Se exportă...' : 'Exportă factură'}
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500">Introduceți ID-ul facturii pentru a genera un PDF rapid sau un export JSON.</p>
             </CardContent>
           </Card>
         </TabsContent>
@@ -693,6 +1071,119 @@ const FinancialDashboard: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <LineChartIcon className="w-5 h-5 text-sky-600" />
+                  Revenue vs Costs vs Profit
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {timelineData.length > 0 ? (
+                  <ChartContainer
+                    config={{
+                      revenue: { label: 'Venituri', color: 'hsl(var(--chart-1))' },
+                      costs: { label: 'Costuri', color: 'hsl(var(--chart-2))' },
+                      profit: { label: 'Profit', color: 'hsl(var(--chart-3))' },
+                    }}
+                    className="h-[280px]"
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={timelineData}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                        <XAxis
+                          dataKey="date"
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(value) => new Date(value).toLocaleDateString('ro-RO', { month: 'short', day: 'numeric' })}
+                        />
+                        <YAxis hide />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Line type="monotone" dataKey="revenue" stroke="var(--color-revenue)" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="costs" stroke="var(--color-costs, #ef4444)" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="profit" stroke="var(--chart-3)" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                ) : (
+                  <div className="text-center py-10 text-gray-400">
+                    <LineChartIcon className="w-10 h-10 mx-auto mb-2" />
+                    <p className="text-sm">Nu există suficiente date pentru a genera graficul.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PieChartIcon className="w-5 h-5" />
+                  Distribuție Categorii Cost
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {costCategoryEntries.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie
+                        data={costCategoryEntries.map(([name, value]) => ({ name, value }))}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={50}
+                        outerRadius={90}
+                        paddingAngle={4}
+                      >
+                        {costCategoryEntries.map((entry, index) => (
+                          <Cell key={entry[0]} fill={categoryPalette[index % categoryPalette.length]} />
+                        ))}
+                      </Pie>
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <PieChartIcon className="w-10 h-10 mx-auto mb-2" />
+                    <p className="text-sm">Nu există date agregate pentru categorii.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-purple-600" />
+                  Distribuție Surse Venit
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {revenueCategoryEntries.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie
+                        data={revenueCategoryEntries.map(([name, value]) => ({ name, value }))}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={40}
+                        outerRadius={90}
+                        paddingAngle={4}
+                      >
+                        {revenueCategoryEntries.map((entry, index) => (
+                          <Cell key={entry[0]} fill={categoryPalette[(index + 2) % categoryPalette.length]} />
+                        ))}
+                      </Pie>
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <Layers className="w-10 h-10 mx-auto mb-2" />
+                    <p className="text-sm">Nu există date agregate pentru sursele de venit.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
@@ -776,8 +1267,8 @@ const FinancialDashboard: React.FC = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="analysis" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <TabsContent value="analysis" className="space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle>Analiza ROI</CardTitle>
@@ -789,32 +1280,25 @@ const FinancialDashboard: React.FC = () => {
                     <p className="text-sm text-gray-600">
                       {financialData && financialData.roi > 0 ?
                         `Investiția ta generează ${financialData.roi.toFixed(1)}% ROI, ceea ce este ` +
-                        (financialData.roi >= 50 ? 'excelent' : financialData.roi >= 20 ? 'bun' : 'decent') +
+                        (financialData.roi >= 50 ? 'excelent' : financialData.roi >= 20 ? 'bun' : 'în creștere') +
                         ' pentru o afacere de servicii juridice.' :
                         'ROI-ul va fi calculat pe măsură ce generezi venituri.'
                       }
                     </p>
                   </div>
-
-                  {financialData && (
-                    <div className="space-y-3">
+                  {breakdownData && (
+                    <div className="grid grid-cols-1 gap-3 text-sm">
                       <div className="flex justify-between">
-                        <span>Cost per Lead:</span>
-                        <span className="font-medium">
-                          {financialData.costs > 0 ? formatCurrency(financialData.costs / 30) : '0 LEI'}
-                        </span>
+                        <span>Profit net:</span>
+                        <span className="font-medium text-green-600">{formatCurrency(breakdownData.profitability.net_profit)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Revenue per Client:</span>
-                        <span className="font-medium">
-                          {formatCurrency(2500)}
-                        </span>
+                        <span>Marjă profit:</span>
+                        <span className="font-medium">{breakdownData.profitability.profit_margin.toFixed(2)}%</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Break-even Point:</span>
-                        <span className="font-medium">
-                          {Math.ceil(financialData.costs / 2500)} clienți/lună
-                        </span>
+                        <span>ROI:</span>
+                        <span className="font-medium">{breakdownData.profitability.roi.toFixed(2)}%</span>
                       </div>
                     </div>
                   )}
@@ -824,48 +1308,166 @@ const FinancialDashboard: React.FC = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle>Proiecții</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <LineChartIcon className="w-5 h-5 text-sky-600" />
+                  Forecast (30 zile)
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-medium mb-2">Creștere Proiectată (6 luni)</h4>
-                    {financialData && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-sm">Venituri proiectate:</span>
-                          <span className="font-medium">
-                            {formatCurrency(financialData.revenue * 1.5)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm">Profit proiectat:</span>
-                          <span className="font-medium text-green-600">
-                            {formatCurrency(financialData.profit * 1.8)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm">ROI proiectat:</span>
-                          <span className="font-medium">
-                            {(financialData.roi * 1.3).toFixed(1)}%
-                          </span>
-                        </div>
+              <CardContent className="space-y-4">
+                {forecastData ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-500">Venit mediu</p>
+                        <p className="font-semibold">{formatCurrency(forecastData.averages.revenue)}</p>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="bg-yellow-50 p-3 rounded">
-                    <h4 className="font-medium text-yellow-800 mb-1">Recomandări</h4>
-                    <ul className="text-sm text-yellow-700 space-y-1">
-                      <li>• Optimizează costurile de marketing digital</li>
-                      <li>• Crește rata de conversie prin automation</li>
-                      <li>• Expandează programul de referral-uri</li>
-                    </ul>
-                  </div>
-                </div>
+                      <div>
+                        <p className="text-gray-500">Cost mediu</p>
+                        <p className="font-semibold">{formatCurrency(forecastData.averages.costs)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500">Profit mediu</p>
+                        <p className="font-semibold text-green-600">{formatCurrency(forecastData.averages.profit)}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-xs">
+                      <div className="bg-slate-50 p-3 rounded">
+                        <p className="text-gray-500 mb-1">7 zile</p>
+                        <p className="font-semibold">{formatCurrency(forecastData.forecasts['7d'].revenue)}</p>
+                        <p className="text-green-600">Profit: {formatCurrency(forecastData.forecasts['7d'].profit)}</p>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded">
+                        <p className="text-gray-500 mb-1">30 zile</p>
+                        <p className="font-semibold">{formatCurrency(forecastData.forecasts['30d'].revenue)}</p>
+                        <p className="text-green-600">Profit: {formatCurrency(forecastData.forecasts['30d'].profit)}</p>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded">
+                        <p className="text-gray-500 mb-1">90 zile</p>
+                        <p className="font-semibold">{formatCurrency(forecastData.forecasts['90d'].revenue)}</p>
+                        <p className="text-green-600">Profit: {formatCurrency(forecastData.forecasts['90d'].profit)}</p>
+                      </div>
+                    </div>
+                    <div className="h-[180px]">
+                      <ChartContainer
+                        config={{
+                          revenue: { label: 'Venituri', color: 'hsl(var(--chart-1))' },
+                          costs: { label: 'Costuri', color: 'hsl(var(--chart-2))' },
+                        }}
+                        className="h-full"
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={forecastSeries}>
+                            <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                            <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                            <YAxis hide />
+                            <ChartTooltip content={<ChartTooltipContent />} />
+                            <Line type="monotone" dataKey="revenue" stroke="var(--color-revenue)" strokeWidth={2} dot={false} />
+                            <Line type="monotone" dataKey="costs" stroke="var(--color-costs, #ef4444)" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </ChartContainer>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500">Datele pentru forecast nu sunt disponibile momentan.</p>
+                )}
               </CardContent>
             </Card>
           </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="w-5 h-5" />
+                  MRR & Subscriptions
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {mrrReport ? (
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="bg-slate-50 p-3 rounded">
+                      <p className="text-gray-500">Total MRR</p>
+                      <p className="text-lg font-semibold text-green-600">{formatCurrency(mrrReport.metrics.total_mrr)}</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded">
+                      <p className="text-gray-500">Active Subscriptions</p>
+                      <p className="text-lg font-semibold">{mrrReport.metrics.active_subscriptions}</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded">
+                      <p className="text-gray-500">Churn Rate</p>
+                      <p className="text-lg font-semibold">{mrrReport.metrics.churn_rate}%</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded">
+                      <p className="text-gray-500">CLV estimat</p>
+                      <p className="text-lg font-semibold">{formatCurrency(mrrReport.metrics.customer_lifetime_value)}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Se încarcă abonamentele recurente...</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calculator className="w-5 h-5" />
+                  Calcul fiscal estimativ
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div className="bg-slate-50 p-3 rounded">
+                    <p className="text-gray-500">TVA estimat</p>
+                    <p className="text-lg font-semibold">{formatCurrency(taxSummary.vat)}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded">
+                    <p className="text-gray-500">Impozit profit</p>
+                    <p className="text-lg font-semibold">{formatCurrency(taxSummary.corporate)}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded">
+                    <p className="text-gray-500">Profit după taxe</p>
+                    <p className="text-lg font-semibold text-green-600">{formatCurrency(taxSummary.profitAfterTax)}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-3">Calcule aproximative pentru TVA 19% și impozit profit 16%.</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Profit & Loss Insights
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {profitLossData ? (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                  <div className="bg-slate-50 p-3 rounded">
+                    <p className="text-gray-500">Perioadă</p>
+                    <p className="font-semibold">{profitLossData.start_date} - {profitLossData.end_date}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded">
+                    <p className="text-gray-500">Profit mediu zilnic</p>
+                    <p className="font-semibold text-green-600">{formatCurrency(profitLossData.avg_daily_profit)}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded">
+                    <p className="text-gray-500">Zi de vârf</p>
+                    <p className="font-semibold">{formatCurrency(profitLossData.best_day_profit)}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded">
+                    <p className="text-gray-500">Zi slabă</p>
+                    <p className="font-semibold text-red-600">{formatCurrency(profitLossData.worst_day_profit)}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">Nu există suficiente date pentru analiza profit/pierdere.</p>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
