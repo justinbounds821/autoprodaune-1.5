@@ -27,7 +27,16 @@ except Exception as e:
 
 from fastapi import FastAPI, Request, HTTPException
 from redis import Redis
-from prometheus_fastapi_instrumentator import Instrumentator
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+except Exception:  # fallback if dependency not installed
+    class Instrumentator:  # type: ignore
+        def __init__(self, *args, **kwargs):
+            pass
+        def instrument(self, app):
+            return self
+        def expose(self, app, endpoint="/metrics"):
+            return self
 from .middleware.rate_limit import rate_limit_middleware
 
 # Import core modules

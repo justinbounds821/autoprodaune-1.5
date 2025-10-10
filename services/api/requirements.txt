@@ -62,6 +62,7 @@ minio==7.2.0
 # Monitoring
 prometheus-client==0.19.0
 sentry-sdk==1.40.5
+prometheus-fastapi-instrumentator==6.1.0
 
 # Testing dependencies
 pytest==7.4.2
