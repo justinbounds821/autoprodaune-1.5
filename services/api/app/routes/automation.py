@@ -14,6 +14,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import logging
 import asyncio
+import os
 
 from ..services.supabase_client import get_supabase_service_instance
 from ..services.social_poster import SocialPoster
@@ -45,6 +46,31 @@ async def get_automation_status() -> Dict[str, Any]:
         Dicționar cu statusul automatizării
     """
     try:
+        # Check FAKE_MODE for testing without real database
+        if os.getenv("FAKE_MODE", "false").lower() == "true":
+            return {
+                "success": True,
+                "data": {
+                    "automation_active": True,
+                    "isActive": True,
+                    "status": "idle",
+                    "daily_target": 3,
+                    "postsToday": 2,
+                    "posts_today": 2,
+                    "lastRun": (datetime.now() - timedelta(hours=2)).isoformat(),
+                    "nextRun": (datetime.now() + timedelta(hours=1)).isoformat(),
+                    "next_scheduled_post": "15:00",
+                    "platforms": ["tiktok", "facebook", "instagram"],
+                    "recent_posts": [],
+                    "recent_videos": [],
+                    "performance": {
+                        "total_views_today": 3420,
+                        "total_engagement_today": 287,
+                        "leads_generated_today": 12
+                    }
+                }
+            }
+
         supabase_service = get_supabase_service_instance()
 
         # Get recent automation activities
@@ -71,6 +97,27 @@ async def get_automation_status() -> Dict[str, Any]:
 
     except Exception as e:
         logging.error(f"Error getting automation status: {e}")
+        # Fallback response when Supabase is not available
+        if "supabase" in str(e).lower() or "connection" in str(e).lower():
+            return {
+                "success": True,
+                "data": {
+                    "automation_active": False,
+                    "isActive": False,
+                    "status": "offline",
+                    "daily_target": 3,
+                    "postsToday": 0,
+                    "posts_today": 0,
+                    "platforms": [],
+                    "recent_posts": [],
+                    "recent_videos": [],
+                    "performance": {
+                        "total_views_today": 0,
+                        "total_engagement_today": 0,
+                        "leads_generated_today": 0
+                    }
+                }
+            }
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/schedule/configure")
@@ -203,6 +250,53 @@ async def trigger_daily_cycle(background_tasks: BackgroundTasks) -> Dict[str, An
 
     except Exception as e:
         logging.error(f"Error triggering daily cycle: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/logs")
+async def get_automation_logs(
+    limit: int = Query(50, description="Number of logs to return"),
+    task_type: Optional[str] = Query(None, description="Filter by task type")
+) -> Dict[str, Any]:
+    """
+    Obține logurile de automatizare cu filtre opționale.
+    """
+    try:
+        # Check FAKE_MODE for testing without real database
+        if os.getenv("FAKE_MODE", "false").lower() == "true":
+            fake_logs = [
+                {
+                    "id": f"log_{i}",
+                    "task_type": ["video_generation", "social_posting", "lead_processing"][i % 3],
+                    "status": ["success", "failed", "pending"][i % 3],
+                    "message": f"Task {i} completed successfully",
+                    "action": f"Task {i}",
+                    "platform": ["tiktok", "facebook", "instagram"][i % 3] if i % 2 == 0 else None,
+                    "details": f"Details for task {i}",
+                    "timestamp": (datetime.now() - timedelta(hours=i)).isoformat(),
+                    "created_at": (datetime.now() - timedelta(hours=i)).isoformat()
+                }
+                for i in range(min(limit, 10))
+            ]
+            
+            if task_type:
+                fake_logs = [log for log in fake_logs if log["task_type"] == task_type]
+            
+            return {
+                "success": True,
+                "data": fake_logs,
+                "total": len(fake_logs)
+            }
+        
+        # Real implementation would query automation_logs table
+        return {
+            "success": True,
+            "data": [],
+            "total": 0,
+            "message": "Automation logs not yet implemented. Use FAKE_MODE for testing."
+        }
+        
+    except Exception as e:
+        logging.error(f"Error getting automation logs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/performance")

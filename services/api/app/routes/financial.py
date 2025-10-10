@@ -9,6 +9,7 @@ Acest modul implementează endpoint-urile REST pentru:
 """
 
 import logging
+import os
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from typing import Dict, Any, Optional, List
@@ -700,6 +701,21 @@ async def get_financial_dashboard(
         Dicționar cu datele dashboard-ului
     """
     try:
+        # Check FAKE_MODE for testing without real database
+        if os.getenv("FAKE_MODE", "false").lower() == "true":
+            return {
+                "success": True,
+                "data": {
+                    "total_costs": 1250.50,
+                    "total_revenue": 8500.00,
+                    "roi_percentage": 580.0,
+                    "videos_generated": 45,
+                    "period": period,
+                    "date_from": date_from or (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
+                    "date_to": date_to or datetime.now().strftime("%Y-%m-%d")
+                }
+            }
+        
         return ft.dashboard(date_from=date_from, date_to=date_to, period=period)
         
     except Exception as e:
@@ -819,22 +835,39 @@ async def update_campaign(
 
 # ==================== ENDPOINT-URI PENTRU CREDIT BALANCE ====================
 
-@router.get("/credit-balance/{provider}", response_model=CreditBalanceResponse)
+@router.get("/credit-balance/{provider}")
 async def get_credit_balance(
-    provider: str = Path(..., description="Providerul pentru care se obține balanța"),
-    # Using Supabase service instead of database session
+    provider: str = Path(..., description="Providerul pentru care se obține balanța")
 ):
     """
-    Obține balanța de credite pentru un provider.
+    Obține balanța de credite pentru un provider (tiktok, elevenlabs, heygen, etc.).
     
     Args:
-        provider: Numele providerului
-        db: Sesiunea de bază de date
+        provider: Numele providerului (tiktok, elevenlabs, heygen, pika)
         
     Returns:
-        Obiect CreditBalance cu balanța
+        Obiect cu credits_available și detalii provider
     """
     try:
+        # Check FAKE_MODE for testing
+        if os.getenv("FAKE_MODE", "false").lower() == "true":
+            mock_balances = {
+                "tiktok": {"credits_available": 5000, "credits_used": 1200, "currency": "credits"},
+                "elevenlabs": {"credits_available": 50000, "credits_used": 12000, "currency": "characters"},
+                "heygen": {"credits_available": 300, "credits_used": 85, "currency": "minutes"},
+                "pika": {"credits_available": 1500, "credits_used": 450, "currency": "seconds"}
+            }
+            
+            if provider.lower() in mock_balances:
+                return {
+                    "success": True,
+                    "provider": provider,
+                    **mock_balances[provider.lower()]
+                }
+            else:
+                raise HTTPException(status_code=404, detail=f"Provider {provider} not supported")
+        
+        # Real implementation
         result = ft.get_credit_balance(provider)
         
         if not result:
