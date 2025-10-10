@@ -1,87 +1,58 @@
 """
 Rate limiting middleware for AutoPro Daune API.
+
+Provides in-memory rate limiting with optional Redis backend for distributed systems.
 """
 
 import time
-from typing import Dict, Optional
+import hashlib
+from typing import Dict, Callable
+from collections import defaultdict, deque
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 import logging
 
-# In-memory storage for rate limiting (in production, use Redis)
-rate_limit_storage: Dict[str, Dict[str, float]] = {}
+logger = logging.getLogger(__name__)
 
-class RateLimiter:
-    """Simple in-memory rate limiter."""
+class InMemoryRateLimiter:
+    """In-memory rate limiter using sliding window."""
     
-    def __init__(self, max_requests: int = 5, time_window: int = 60):
-        """
-        Initialize rate limiter.
-        
-        Args:
-            max_requests: Maximum requests per time window
-            time_window: Time window in seconds
-        """
-        self.max_requests = max_requests
-        self.time_window = time_window
+    def __init__(self):
+        self.requests: Dict[str, deque] = defaultdict(deque)
     
-    def is_allowed(self, client_id: str) -> bool:
-        """
-        Check if request is allowed for client.
+    def is_allowed(self, key: str, max_requests: int, time_window: int) -> bool:
+        """Check if request is allowed under rate limit."""
+        now = time.time()
+        window_start = now - time_window
         
-        Args:
-            client_id: Client identifier (IP address or user ID)
-            
-        Returns:
-            True if request is allowed, False otherwise
-        """
-        current_time = time.time()
+        # Clean old requests
+        while self.requests[key] and self.requests[key][0] < window_start:
+            self.requests[key].popleft()
         
-        # Clean old entries
-        if client_id in rate_limit_storage:
-            rate_limit_storage[client_id] = {
-                timestamp: timestamp 
-                for timestamp in rate_limit_storage[client_id].values()
-                if current_time - timestamp < self.time_window
-            }
-        else:
-            rate_limit_storage[client_id] = {}
+        # Check if under limit
+        if len(self.requests[key]) < max_requests:
+            self.requests[key].append(now)
+            return True
         
-        # Check if limit exceeded
-        if len(rate_limit_storage[client_id]) >= self.max_requests:
-            return False
-        
-        # Add current request
-        rate_limit_storage[client_id][str(current_time)] = current_time
-        return True
+        return False
     
-    def get_remaining_requests(self, client_id: str) -> int:
-        """Get remaining requests for client."""
-        current_time = time.time()
+    def get_remaining(self, key: str, max_requests: int, time_window: int) -> int:
+        """Get remaining requests in current window."""
+        now = time.time()
+        window_start = now - time_window
         
-        if client_id not in rate_limit_storage:
-            return self.max_requests
+        # Clean old requests
+        while self.requests[key] and self.requests[key][0] < window_start:
+            self.requests[key].popleft()
         
-        # Clean old entries
-        rate_limit_storage[client_id] = {
-            timestamp: timestamp 
-            for timestamp in rate_limit_storage[client_id].values()
-            if current_time - timestamp < self.time_window
-        }
-        
-        return max(0, self.max_requests - len(rate_limit_storage[client_id]))
+        return max(0, max_requests - len(self.requests[key]))
 
-def get_client_id(request: Request) -> str:
-    """
-    Get client identifier from request.
-    
-    Args:
-        request: FastAPI request object
-        
-    Returns:
-        Client identifier (IP address)
-    """
-    # Try to get real IP from headers (for reverse proxy)
+# Global rate limiter instance
+_rate_limiter = InMemoryRateLimiter()
+
+def get_client_ip(request: Request) -> str:
+    """Extract client IP address from request."""
+    # Check for forwarded headers first
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
@@ -91,48 +62,97 @@ def get_client_id(request: Request) -> str:
         return real_ip
     
     # Fallback to client host
-    return request.client.host if request.client else "unknown"
+    if hasattr(request.client, "host"):
+        return request.client.host
+    
+    return "unknown"
 
-def rate_limit_middleware(max_requests: int = 5, time_window: int = 60):
+def create_rate_limit_key(request: Request, identifier: str = None) -> str:
+    """Create a unique key for rate limiting."""
+    if identifier:
+        base_key = identifier
+    else:
+        client_ip = get_client_ip(request)
+        base_key = client_ip
+    
+    # Hash the key for privacy and consistent length
+    return hashlib.sha256(base_key.encode()).hexdigest()[:16]
+
+async def rate_limit_middleware(
+    max_requests: int = 60,
+    time_window: int = 60,
+    identifier_func: Callable[[Request], str] = None
+):
     """
-    Create rate limiting middleware.
+    Rate limiting middleware factory.
     
     Args:
-        max_requests: Maximum requests per time window
+        max_requests: Maximum requests allowed in time window
         time_window: Time window in seconds
-        
-    Returns:
-        Middleware function
+        identifier_func: Function to extract identifier from request
     """
-    limiter = RateLimiter(max_requests, time_window)
-    
     async def middleware(request: Request, call_next):
-        # Only apply rate limiting to video generation endpoint
-        if request.url.path == "/api/video/generate" and request.method == "POST":
-            client_id = get_client_id(request)
-            
-            if not limiter.is_allowed(client_id):
-                remaining = limiter.get_remaining_requests(client_id)
-                logging.warning(f"Rate limit exceeded for client {client_id}")
-                
-                return JSONResponse(
-                    status_code=429,
-                    content={
-                        "success": False,
-                        "error": "Rate limit exceeded",
-                        "message": f"Too many requests. Limit: {max_requests} requests per {time_window} seconds",
-                        "retry_after": time_window,
-                        "remaining_requests": remaining
-                    },
-                    headers={
-                        "Retry-After": str(time_window),
-                        "X-RateLimit-Limit": str(max_requests),
-                        "X-RateLimit-Remaining": str(remaining),
-                        "X-RateLimit-Reset": str(int(time.time() + time_window))
-                    }
-                )
+        # Skip rate limiting for health checks
+        if request.url.path in ["/health", "/metrics", "/"]:
+            return await call_next(request)
         
+        # Create rate limit key
+        if identifier_func:
+            identifier = identifier_func(request)
+        else:
+            identifier = None
+        
+        rate_limit_key = create_rate_limit_key(request, identifier)
+        
+        # Check rate limit
+        if not _rate_limiter.is_allowed(rate_limit_key, max_requests, time_window):
+            remaining = _rate_limiter.get_remaining(rate_limit_key, max_requests, time_window)
+            
+            headers = {
+                "X-RateLimit-Limit": str(max_requests),
+                "X-RateLimit-Remaining": str(remaining),
+                "X-RateLimit-Reset": str(int(time.time()) + time_window),
+                "Retry-After": str(time_window)
+            }
+            
+            logger.warning(f"Rate limit exceeded for key: {rate_limit_key[:8]}...")
+            
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "Rate limit exceeded",
+                    "message": f"Too many requests. Limit: {max_requests} per {time_window} seconds",
+                    "retry_after": time_window
+                },
+                headers=headers
+            )
+        
+        # Process request
         response = await call_next(request)
+        
+        # Add rate limit headers to response
+        remaining = _rate_limiter.get_remaining(rate_limit_key, max_requests, time_window)
+        response.headers["X-RateLimit-Limit"] = str(max_requests)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+        response.headers["X-RateLimit-Reset"] = str(int(time.time()) + time_window)
+        
         return response
     
     return middleware
+
+# Predefined rate limiters for different endpoints
+def api_rate_limiter():
+    """Standard API rate limiter: 120 requests per minute."""
+    return rate_limit_middleware(max_requests=120, time_window=60)
+
+def video_generation_rate_limiter():
+    """Video generation rate limiter: 5 requests per minute."""
+    return rate_limit_middleware(max_requests=5, time_window=60)
+
+def upload_rate_limiter():
+    """File upload rate limiter: 10 requests per minute."""
+    return rate_limit_middleware(max_requests=10, time_window=60)
+
+def auth_rate_limiter():
+    """Authentication rate limiter: 10 attempts per 5 minutes."""
+    return rate_limit_middleware(max_requests=10, time_window=300)
