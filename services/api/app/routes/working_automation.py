@@ -10,6 +10,8 @@ from datetime import datetime
 import logging
 import os
 
+from ..core.monitoring import AUTOMATION_STATUS
+
 router = APIRouter(
     prefix="/api/working-automation",
     tags=["working-automation"],
@@ -64,6 +66,9 @@ async def toggle_automation(request: AutomationToggleRequest):
     try:
         old_status = automation_state["active"]
         automation_state["active"] = request.active
+        
+        # Update Prometheus gauge
+        AUTOMATION_STATUS.set(1.0 if request.active else 0.0)
 
         action = {
             "action": f"Automation {'activated' if request.active else 'deactivated'}",
