@@ -8,11 +8,16 @@ Acest modul implementează endpoint-urile REST pentru:
 - Dashboard financiar
 """
 
+import csv
+import io
+import json
 import logging
+import uuid
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, Body, Form
+from fastapi.responses import Response, StreamingResponse
 
 from ..database import get_db
 from ..models import CampaignMetrics
@@ -31,9 +36,12 @@ roi_calculator = ROICalculator()
 from ..schemas.financial import (
     APICostCreate, RevenueCreate, FinancialMetricsCreate,
     ROIAnalysisResponse, ProfitLossResponse, FinancialDashboardResponse,
+    FinancialBreakdownResponse, FinancialForecastResponse,
     CampaignMetricsCreate, CampaignMetricsResponse,
     CreditBalanceUpdate, CreditBalanceResponse,
-    BudgetAlertCreate, BudgetAlertResponse
+    BudgetAlertCreate, BudgetAlertResponse,
+    CostCategory, CostCategoryCreate, CostCategoryUpdate, CostCategoryAssignment,
+    ExportRequest
 )
 
 
@@ -303,6 +311,180 @@ async def get_roi_analysis(
         raise HTTPException(status_code=500, detail=f"Eroare la analiza ROI: {str(e)}")
 
 
+@router.get("/breakdown", response_model=FinancialBreakdownResponse)
+async def get_financial_breakdown(
+    period: str = Query("30d", description="Perioada preset pentru breakdown"),
+    date_from: Optional[str] = Query(None, description="Data start custom"),
+    date_to: Optional[str] = Query(None, description="Data end custom")
+):
+    """Returnează breakdown detaliat pe costuri și venituri."""
+    try:
+        return ft.financial_breakdown(period=period, date_from=date_from, date_to=date_to)
+    except Exception as e:
+        logging.error(f"Eroare la breakdown financiar: {e}")
+        raise HTTPException(status_code=500, detail=f"Eroare la breakdown: {str(e)}")
+
+
+@router.get("/forecast", response_model=FinancialForecastResponse)
+async def get_financial_forecast(
+    period: str = Query("60d", description="Perioada utilizată pentru calculul forecast-ului"),
+    date_from: Optional[str] = Query(None, description="Data start custom"),
+    date_to: Optional[str] = Query(None, description="Data end custom")
+):
+    """Returnează forecast simplificat pentru venituri/costuri/profit."""
+    try:
+        return ft.financial_forecast(period=period, date_from=date_from, date_to=date_to)
+    except Exception as e:
+        logging.error(f"Eroare la forecast financiar: {e}")
+        raise HTTPException(status_code=500, detail=f"Eroare la forecast: {str(e)}")
+
+
+# ==================== COST CATEGORY MANAGEMENT ====================
+
+@router.get("/cost-categories", response_model=List[CostCategory])
+async def list_cost_categories():
+    """List all cost categories (custom + default fallbacks)."""
+    try:
+        categories = ft.list_cost_categories()
+        return categories
+    except Exception as e:
+        logging.error(f"Eroare la listarea categoriilor de cost: {e}")
+        raise HTTPException(status_code=500, detail=f"Eroare la listare categorii: {str(e)}")
+
+
+@router.post("/cost-categories", response_model=CostCategory)
+async def create_cost_category(category: CostCategoryCreate):
+    try:
+        result = ft.create_cost_category(category.dict())
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logging.error(f"Eroare la crearea categoriei: {e}")
+        raise HTTPException(status_code=500, detail=f"Eroare la crearea categoriei: {str(e)}")
+
+
+@router.put("/cost-categories/{slug}", response_model=CostCategory)
+async def update_cost_category(slug: str, updates: CostCategoryUpdate):
+    try:
+        ft.update_cost_category(slug, updates.dict(exclude_unset=True))
+        categories = ft.list_cost_categories()
+        for cat in categories:
+            if cat.get("slug") == slug:
+                return cat
+        raise HTTPException(status_code=404, detail="Categoria nu a fost găsită după actualizare")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logging.error(f"Eroare la actualizarea categoriei: {e}")
+        raise HTTPException(status_code=500, detail=f"Eroare la actualizarea categoriei: {str(e)}")
+
+
+@router.delete("/cost-categories/{slug}")
+async def delete_cost_category(slug: str) -> Dict[str, Any]:
+    try:
+        ft.delete_cost_category(slug)
+        return {"success": True, "slug": slug}
+    except Exception as e:
+        logging.error(f"Eroare la ștergerea categoriei: {e}")
+        raise HTTPException(status_code=500, detail=f"Eroare la ștergerea categoriei: {str(e)}")
+
+
+@router.post("/costs/{cost_id}/assign-category")
+async def assign_cost_category(cost_id: int, assignment: CostCategoryAssignment) -> Dict[str, Any]:
+    try:
+        result = ft.assign_cost_category(cost_id, assignment.category_slug)
+        return {"success": True, "data": result}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logging.error(f"Eroare la asignarea categoriei: {e}")
+        raise HTTPException(status_code=500, detail=f"Eroare la asignarea categoriei: {str(e)}")
+
+
+@router.post("/export")
+async def export_financial_data(export_request: ExportRequest):
+    """Exportă date financiare în format CSV/JSON."""
+    try:
+        data = ft.export_financial_data(
+            period=export_request.period or "30d",
+            date_from=export_request.start_date.isoformat() if export_request.start_date else None,
+            date_to=export_request.end_date.isoformat() if export_request.end_date else None,
+            include_costs=export_request.include_costs,
+            include_revenue=export_request.include_revenue,
+        )
+
+        filename_base = f"financial-export-{datetime.now().strftime('%Y%m%d-%H%M')}"
+        export_format = export_request.format.lower()
+
+        if export_format == "json":
+            payload = json.dumps(data, default=str, ensure_ascii=False, indent=2).encode("utf-8")
+            return Response(
+                content=payload,
+                media_type="application/json",
+                headers={"Content-Disposition": f"attachment; filename={filename_base}.json"}
+            )
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        metrics = data.get("metrics", {}) or {}
+        if export_request.include_metrics:
+            writer.writerow(["METRICS", "Field", "Value"])
+            for key in ("total_revenue", "total_costs", "net_profit", "roi_percentage"):
+                writer.writerow(["summary", key, metrics.get(key)])
+            writer.writerow([])
+
+        if export_request.include_costs:
+            writer.writerow(["COSTS", "Provider", "Operation", "Category", "Amount", "Timestamp"])
+            for cost in data.get("costs", []) or []:
+                metadata = cost.get("metadata") or {}
+                if isinstance(metadata, str):
+                    try:
+                        metadata = json.loads(metadata)
+                    except json.JSONDecodeError:
+                        metadata = {}
+                writer.writerow([
+                    "cost",
+                    cost.get("provider"),
+                    cost.get("operation"),
+                    metadata.get("category") or metadata.get("cost_category"),
+                    cost.get("cost"),
+                    cost.get("timestamp"),
+                ])
+            writer.writerow([])
+
+        if export_request.include_revenue:
+            writer.writerow(["REVENUE", "Source", "Category", "Amount", "Timestamp"])
+            for revenue in data.get("revenues", []) or []:
+                metadata = revenue.get("metadata") or {}
+                if isinstance(metadata, str):
+                    try:
+                        metadata = json.loads(metadata)
+                    except json.JSONDecodeError:
+                        metadata = {}
+                writer.writerow([
+                    "revenue",
+                    revenue.get("source"),
+                    metadata.get("category") or metadata.get("revenue_category"),
+                    revenue.get("amount"),
+                    revenue.get("timestamp"),
+                ])
+
+        csv_content = output.getvalue().encode("utf-8")
+        return Response(
+            content=csv_content,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename_base}.csv"}
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Eroare la exportul datelor financiare: {e}")
+        raise HTTPException(status_code=500, detail=f"Eroare la export: {str(e)}")
+
+
 # ==================== PAYMENT TRACKING ENDPOINTS ====================
 
 @router.get("/payments")
@@ -522,8 +704,6 @@ async def create_invoice(
 ) -> Dict[str, Any]:
     """Create a new invoice."""
     try:
-        import json
-        
         # Parse items
         try:
             invoice_items = json.loads(items)
@@ -572,6 +752,34 @@ async def create_invoice(
         raise HTTPException(status_code=500, detail=f"Failed to create invoice: {str(e)}")
 
 
+@router.get("/invoices/{invoice_id}/export")
+async def export_invoice(
+    invoice_id: str,
+    format: str = Query("pdf", description="Formatul exportului (pdf/json)")
+):
+    """Exportă o factură în format PDF simplificat sau JSON."""
+    try:
+        pdf_bytes, invoice = ft.generate_invoice_pdf(invoice_id)
+        if format.lower() == "json":
+            return Response(
+                content=json.dumps(invoice, default=str, ensure_ascii=False, indent=2).encode("utf-8"),
+                media_type="application/json",
+                headers={"Content-Disposition": f"attachment; filename=invoice-{invoice_id}.json"}
+            )
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=invoice-{invoice_id}.pdf"}
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"[InvoiceGeneration] Export invoice error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export invoice: {str(e)}")
+
+
 # ==================== BUDGET PLANNING ENDPOINTS ====================
 
 @router.get("/budget-plans")
@@ -609,8 +817,6 @@ async def create_budget_plan(
 ) -> Dict[str, Any]:
     """Create a new budget plan."""
     try:
-        import json
-        
         # Parse categories
         try:
             budget_categories = json.loads(categories)
@@ -650,7 +856,7 @@ async def create_budget_plan(
         raise HTTPException(status_code=500, detail=f"Failed to create budget plan: {str(e)}")
 
 
-@router.get("/profit-loss")
+@router.get("/profit-loss", response_model=ProfitLossResponse)
 async def get_profit_loss(
     start_date: date = Query(..., description="Data de început"),
     end_date: date = Query(..., description="Data de sfârșit")
@@ -668,10 +874,14 @@ async def get_profit_loss(
     try:
         if start_date > end_date:
             raise HTTPException(status_code=400, detail="Data de început nu poate fi mai mare decât data de sfârșit")
-        
-        days = (end_date - start_date).days
+
+        days = (end_date - start_date).days or 1
         period = f"{days}d"
-        return ft.profit_loss_between(period)
+        return ft.profit_loss_report(
+            period=period,
+            date_from=start_date.isoformat(),
+            date_to=end_date.isoformat(),
+        )
         
     except HTTPException:
         raise
