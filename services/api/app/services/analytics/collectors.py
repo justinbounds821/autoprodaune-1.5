@@ -4,11 +4,129 @@ Analytics Collectors - Individual data collectors for different sources
 
 import os
 import logging
+import inspect
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from .models import DataSource, MetricType, MetricData
 
 logger = logging.getLogger(__name__)
+
+
+class BaseMetricsCollector:
+    """Funcționalități comune pentru colectorii de metrici."""
+
+    def __init__(self, cache: Optional[Any] = None):
+        self.cache = cache
+
+    async def _fetch_from_cache(self, key: str) -> Optional[Any]:
+        if not self.cache:
+            return None
+
+        try:
+            cached_value = self.cache.get(key)
+            if inspect.isawaitable(cached_value):
+                cached_value = await cached_value
+            return cached_value
+        except Exception as exc:
+            logger.warning("Nu s-a putut accesa cache-ul pentru %s: %s", key, exc)
+            return None
+
+    async def _safe_call_provider(
+        self,
+        provider: Any,
+        candidate_methods: List[str],
+        *,
+        context: str,
+    ) -> Optional[Any]:
+        for method_name in candidate_methods:
+            if hasattr(provider, method_name):
+                method = getattr(provider, method_name)
+                try:
+                    result = method()
+                    if inspect.isawaitable(result):
+                        result = await result
+                    return result
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"{context} provider method '{method_name}' failed: {exc}"
+                    ) from exc
+        raise RuntimeError(
+            f"No supported provider methods found for {context} metrics collection"
+        )
+
+    async def _query_supabase_table(self, client: Any, table_name: str) -> Optional[Any]:
+        try:
+            query = client.table(table_name).select("*")
+        except AttributeError as exc:
+            raise RuntimeError(
+                "Supabase client nu expune interfața table(...).select(...)"
+            ) from exc
+
+        try:
+            response = query.execute() if hasattr(query, "execute") else query
+            if inspect.isawaitable(response):
+                response = await response
+        except Exception as exc:
+            raise RuntimeError(
+                f"Interogarea Supabase pentru tabelul '{table_name}' a eșuat: {exc}"
+            ) from exc
+
+        if isinstance(response, dict):
+            return response.get("data") or response
+        if hasattr(response, "data"):
+            return response.data
+        return response
+
+    def _build_metrics_from_payload(
+        self,
+        payload: Any,
+        *,
+        source: DataSource,
+        default_description: str,
+    ) -> List[MetricData]:
+        metrics: List[MetricData] = []
+
+        def _append_metric(
+            metric_name: str, metric_value: Any, description: Optional[str] = None
+        ) -> None:
+            if not isinstance(metric_value, (int, float)):
+                logger.debug(
+                    "Valoarea pentru metrica %s nu este numerică și va fi ignorată",
+                    metric_name,
+                )
+                return
+
+            metrics.append(
+                MetricData(
+                    name=metric_name,
+                    value=metric_value,
+                    metric_type=MetricType.GAUGE,
+                    labels={"source": source.value},
+                    timestamp=datetime.now(),
+                    source=source,
+                    description=description or f"{default_description}: {metric_name}",
+                )
+            )
+
+        if isinstance(payload, dict):
+            for key, value in payload.items():
+                _append_metric(key, value)
+        elif isinstance(payload, list):
+            for entry in payload:
+                if isinstance(entry, dict):
+                    if "name" in entry and "value" in entry:
+                        _append_metric(entry["name"], entry["value"], entry.get("description"))
+                    else:
+                        for key, value in entry.items():
+                            _append_metric(key, value)
+                else:
+                    logger.debug("Element payload necunoscut: %s", entry)
+        else:
+            raise TypeError(
+                "Payload-ul pentru metrici trebuie să fie dict sau listă de dict-uri"
+            )
+
+        return metrics
 
 
 class GoogleSheetsCollector:
@@ -143,88 +261,170 @@ class SocialMediaCollector:
         return metrics
 
 
-class VideoGenerationCollector:
+class VideoGenerationCollector(BaseMetricsCollector):
     """Colector pentru date despre generarea video"""
-    
-    def __init__(self):
-        pass
+
+    def __init__(
+        self,
+        supabase_client: Optional[Any] = None,
+        cache: Optional[Any] = None,
+        video_metrics_repository: Optional[Any] = None,
+        external_api: Optional[Any] = None,
+    ):
+        """Permite injectarea dependențelor necesare colectării metricilor."""
+
+        super().__init__(cache=cache)
+
+        self.supabase_client = supabase_client
+        self.video_metrics_repository = video_metrics_repository
+        self.external_api = external_api
         
     async def collect_video_metrics(self) -> List[MetricData]:
         """Colectează metrici despre generarea video"""
         metrics = []
-        
+
         try:
-            # Simulează colectarea datelor din sistemul de generare video
-            video_data = {
-                "total_videos_generated": 45,
-                "videos_today": 3,
-                "total_processing_time": 234.5,
-                "avg_generation_time": 45.2,
-                "success_rate": 95.6,
-                "failed_generations": 2,
-                "total_cost": 125.50
-            }
-            
-            for key, value in video_data.items():
-                metric = MetricData(
-                    name=key,
-                    value=value,
-                    metric_type=MetricType.GAUGE,
-                    labels={"source": "video_generation"},
-                    timestamp=datetime.now(),
+            video_data = await self._get_video_metrics_from_dependencies()
+
+            if not video_data:
+                logger.warning("Nu există date de generare video disponibile")
+                return metrics
+
+            metrics.extend(
+                self._build_metrics_from_payload(
+                    payload=video_data,
                     source=DataSource.VIDEO_GENERATION,
-                    description=f"Video generation metric: {key}"
+                    default_description="Video generation metric",
                 )
-                metrics.append(metric)
-                
+            )
+
             logger.info(f"Colectat {len(metrics)} metrici din Video Generation")
-            
-        except Exception as e:
-            logger.error(f"Eroare la colectarea datelor din Video Generation: {str(e)}")
-            
+
+        except Exception as exc:
+            logger.error("Eroare la colectarea datelor din Video Generation: %s", exc)
+            raise
+
         return metrics
 
+    async def _get_video_metrics_from_dependencies(self) -> Optional[Any]:
+        """Extrage metricile de generare video din dependențele configurate."""
 
-class FinancialCollector:
+        if not any([self.supabase_client, self.cache, self.video_metrics_repository, self.external_api]):
+            raise RuntimeError(
+                "Niciun provider de date configurat pentru metricile de generare video"
+            )
+
+        data = await self._fetch_from_cache("video_generation_metrics")
+        if data:
+            return data
+
+        if self.video_metrics_repository:
+            data = await self._safe_call_provider(
+                self.video_metrics_repository,
+                ["get_video_metrics", "fetch_video_metrics", "list_video_metrics"],
+                context="video",
+            )
+            if data:
+                return data
+
+        if self.external_api:
+            data = await self._safe_call_provider(
+                self.external_api,
+                ["get_metrics", "fetch_metrics", "video_metrics"],
+                context="video external",
+            )
+            if data:
+                return data
+
+        if self.supabase_client:
+            data = await self._query_supabase_table(
+                client=self.supabase_client, table_name="video_generation_metrics"
+            )
+            if data:
+                return data
+
+        return None
+
+
+class FinancialCollector(BaseMetricsCollector):
     """Colector pentru date financiare"""
-    
-    def __init__(self):
-        pass
-        
+
+    def __init__(
+        self,
+        supabase_client: Optional[Any] = None,
+        cache: Optional[Any] = None,
+        financial_repository: Optional[Any] = None,
+        accounting_api: Optional[Any] = None,
+    ):
+        super().__init__(cache=cache)
+
+        self.supabase_client = supabase_client
+        self.financial_repository = financial_repository
+        self.accounting_api = accounting_api
+
     async def collect_financial_metrics(self) -> List[MetricData]:
         """Colectează metrici financiare"""
         metrics = []
-        
+
         try:
-            # Simulează colectarea datelor financiare
-            financial_data = {
-                "total_revenue": 5678.90,
-                "total_costs": 2345.67,
-                "net_profit": 3333.23,
-                "roi_percentage": 142.1,
-                "cost_per_lead": 15.67,
-                "revenue_per_lead": 37.86,
-                "monthly_revenue": 1234.56
-            }
-            
-            for key, value in financial_data.items():
-                metric = MetricData(
-                    name=key,
-                    value=value,
-                    metric_type=MetricType.GAUGE,
-                    labels={"source": "financial"},
-                    timestamp=datetime.now(),
+            financial_data = await self._get_financial_metrics_from_dependencies()
+
+            if not financial_data:
+                logger.warning("Nu există date financiare disponibile")
+                return metrics
+
+            metrics.extend(
+                self._build_metrics_from_payload(
+                    payload=financial_data,
                     source=DataSource.FINANCIAL,
-                    description=f"Financial metric: {key}"
+                    default_description="Financial metric",
                 )
-                metrics.append(metric)
-                
+            )
+
             logger.info(f"Colectat {len(metrics)} metrici financiare")
-            
-        except Exception as e:
-            logger.error(f"Eroare la colectarea datelor financiare: {str(e)}")
-            
+
+        except Exception as exc:
+            logger.error("Eroare la colectarea datelor financiare: %s", exc)
+            raise
+
         return metrics
+
+    async def _get_financial_metrics_from_dependencies(self) -> Optional[Any]:
+        if not any([self.supabase_client, self.cache, self.financial_repository, self.accounting_api]):
+            raise RuntimeError(
+                "Niciun provider de date configurat pentru metricile financiare"
+            )
+
+        data = await self._fetch_from_cache("financial_metrics")
+        if data:
+            return data
+
+        if self.financial_repository:
+            data = await self._safe_call_provider(
+                self.financial_repository,
+                ["get_financial_metrics", "fetch_financial_metrics", "list_financial_metrics"],
+                context="financial",
+            )
+            if data:
+                return data
+
+        if self.accounting_api:
+            data = await self._safe_call_provider(
+                self.accounting_api,
+                ["get_metrics", "fetch_metrics", "financial_metrics"],
+                context="financial external",
+            )
+            if data:
+                return data
+
+        if self.supabase_client:
+            data = await self._query_supabase_table(
+                client=self.supabase_client, table_name="financial_metrics"
+            )
+            if data:
+                return data
+
+        return None
 
 
 class WebsiteCollector:

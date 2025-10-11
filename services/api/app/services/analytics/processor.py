@@ -12,9 +12,24 @@ logger = logging.getLogger(__name__)
 
 class AnalyticsProcessor:
     """Procesează și analizează datele de analytics"""
-    
-    def __init__(self):
-        pass
+
+    def __init__(
+        self,
+        cache: Optional[Any] = None,
+        anomaly_detector: Optional[Any] = None,
+        repositories: Optional[Dict[str, Any]] = None,
+        cache_ttl: Optional[int] = None,
+        config: Optional[Dict[str, Any]] = None,
+        **dependencies: Any,
+    ):
+        """Configurează procesatorul cu dependențe și opțiuni dinamice."""
+
+        self.cache = cache
+        self.anomaly_detector = anomaly_detector
+        self.repositories = repositories or {}
+        self.cache_ttl = cache_ttl
+        self.config = config or {}
+        self.dependencies = dependencies
     
     def process_metrics(self, metrics: List[MetricData]) -> Dict[str, Any]:
         """
