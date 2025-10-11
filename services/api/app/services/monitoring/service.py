@@ -16,10 +16,35 @@ logger = logging.getLogger(__name__)
 
 class MonitoringService:
     """Serviciu principal de monitoring"""
-    
-    def __init__(self):
+
+    def __init__(self, supabase_service=None, analytics_processor=None):
         self.system_collector = SystemMetricsCollector()
-        self.business_collector = BusinessMetricsCollector()
+
+        self.supabase_service = supabase_service
+        self.analytics_processor = analytics_processor
+
+        if self.supabase_service is None:
+            try:
+                from ..supabase_client import get_supabase_service_instance
+
+                self.supabase_service = get_supabase_service_instance()
+            except Exception as exc:
+                logger.warning("Supabase service unavailable for monitoring: %s", exc)
+                self.supabase_service = None
+
+        if self.analytics_processor is None:
+            try:
+                from ..analytics.processor import AnalyticsProcessor
+
+                self.analytics_processor = AnalyticsProcessor()
+            except Exception as exc:
+                logger.warning("AnalyticsProcessor unavailable for monitoring: %s", exc)
+                self.analytics_processor = None
+
+        self.business_collector = BusinessMetricsCollector(
+            supabase_service=self.supabase_service,
+            analytics_processor=self.analytics_processor,
+        )
         self.alert_manager = AlertManager()
         self.metrics_history = []
         
