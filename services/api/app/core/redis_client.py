@@ -200,7 +200,7 @@ class RedisClient:
         try:
             yield pipe
         finally:
-            await pipe.reset()
+            pipe.reset()
 
 
 # Global Redis client instance
