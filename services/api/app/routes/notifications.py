@@ -4,22 +4,72 @@ Notifications routes for AutoPro Daune API.
 This module provides endpoints for sending notifications and managing alerts.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Form
-from sqlalchemy.orm import Session
-from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Form
+from typing import Dict, Any, Optional
+from datetime import datetime
 import logging
 import os
-import requests
 
-from ..database import get_db
+from pydantic import BaseModel, Field, root_validator, validator
+
 from ..services.supabase_client import get_supabase_service_instance
+from ..services.notification_preferences import (
+    NotificationPreferencesManager,
+    DEFAULT_PREFERENCES,
+)
 
 router = APIRouter(
     prefix="/api/notify",
     tags=["notifications"],
     responses={404: {"description": "Not found"}}
 )
+
+
+ALLOWED_DIGEST_FREQUENCIES = {"instant", "hourly", "daily", "weekly"}
+DEFAULT_PREFERENCES_USER = "global-admin"
+
+
+class NotificationPreferencesPayload(BaseModel):
+    """Payload model for notification preference updates."""
+
+    email: bool = Field(True, description="Primește notificări prin email")
+    sms: bool = Field(False, description="Primește notificări prin SMS")
+    whatsapp: bool = Field(True, description="Primește notificări prin WhatsApp")
+    in_app: bool = Field(True, description="Activează notificările în aplicație")
+    lead_updates: bool = Field(True, description="Alerte pentru lead-uri noi și actualizări")
+    video_updates: bool = Field(True, description="Alerte pentru generarea și publicarea videourilor")
+    financial_reports: bool = Field(True, description="Trimite rapoarte financiare")
+    social_alerts: bool = Field(True, description="Notificări pentru social media și engagement")
+    digest_frequency: str = Field(
+        "daily",
+        description="Frecvența rapoartelor consolidate (instant, hourly, daily, weekly)",
+    )
+    quiet_hours_start: Optional[str] = Field(
+        None,
+        regex=r"^([01]\d|2[0-3]):[0-5]\d$",
+        description="Ora de start pentru quiet hours (HH:MM)",
+    )
+    quiet_hours_end: Optional[str] = Field(
+        None,
+        regex=r"^([01]\d|2[0-3]):[0-5]\d$",
+        description="Ora de final pentru quiet hours (HH:MM)",
+    )
+
+    @validator("digest_frequency")
+    def validate_digest_frequency(cls, value: str) -> str:
+        if value not in ALLOWED_DIGEST_FREQUENCIES:
+            raise ValueError(
+                f"digest_frequency must be one of: {', '.join(sorted(ALLOWED_DIGEST_FREQUENCIES))}"
+            )
+        return value
+
+    @root_validator
+    def validate_quiet_hours(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        start = values.get("quiet_hours_start")
+        end = values.get("quiet_hours_end")
+        if (start and not end) or (end and not start):
+            raise ValueError("quiet_hours_start and quiet_hours_end must be provided together")
+        return values
 
 @router.post("/test")
 async def send_test_notification(
@@ -325,6 +375,93 @@ async def mark_notification_as_read(
     except Exception as e:
         logging.error(f"Error marking notification as read: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to mark as read: {str(e)}")
+
+
+# ==================== PREFERENCE MANAGEMENT ====================
+
+@router.get("/preferences")
+async def get_notification_preferences(
+    user_id: str = Query(
+        DEFAULT_PREFERENCES_USER,
+        description="User identifier for loading preferences",
+    )
+) -> Dict[str, Any]:
+    """Return notification preferences for the requested user."""
+
+    try:
+        preferences = NotificationPreferencesManager.get_preferences(user_id)
+        return {
+            "success": True,
+            "user_id": user_id,
+            "preferences": preferences,
+        }
+    except Exception as exc:
+        logging.error(f"Error loading notification preferences: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to load preferences")
+
+
+@router.post("/preferences")
+async def update_notification_preferences(
+    payload: NotificationPreferencesPayload,
+    user_id: str = Query(
+        DEFAULT_PREFERENCES_USER,
+        description="User identifier for saving preferences",
+    ),
+) -> Dict[str, Any]:
+    """Persist notification preferences for a user."""
+
+    try:
+        updated = NotificationPreferencesManager.update_preferences(user_id, payload.dict())
+        return {
+            "success": True,
+            "message": "Preferences saved",
+            "user_id": user_id,
+            "preferences": updated,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logging.error(f"Error updating preferences: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to save preferences")
+
+
+@router.post("/preferences/reset")
+async def reset_notification_preferences(
+    user_id: str = Query(
+        DEFAULT_PREFERENCES_USER,
+        description="User identifier to reset",
+    )
+) -> Dict[str, Any]:
+    """Reset preferences back to the default profile."""
+
+    try:
+        defaults = NotificationPreferencesManager.reset_preferences(user_id)
+        return {
+            "success": True,
+            "message": "Preferences reset to defaults",
+            "user_id": user_id,
+            "preferences": defaults,
+        }
+    except Exception as exc:
+        logging.error(f"Error resetting preferences: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to reset preferences")
+
+
+@router.get("/preferences/all")
+async def list_notification_preferences() -> Dict[str, Any]:
+    """List all stored preferences (admin helper)."""
+
+    try:
+        data = NotificationPreferencesManager.list_preferences()
+        return {
+            "success": True,
+            "preferences": data,
+            "count": len(data),
+            "defaults": DEFAULT_PREFERENCES,
+        }
+    except Exception as exc:
+        logging.error(f"Error listing preferences: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to list preferences")
 
 
 # ==================== EMAIL NOTIFICATION SYSTEM ====================

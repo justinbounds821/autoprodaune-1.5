@@ -158,3 +158,18 @@ export interface OverviewStats {
   automationStatus: 'active' | 'inactive';
   systemHealth: 'good' | 'warning' | 'critical';
 }
+
+export interface NotificationPreferences {
+  email: boolean;
+  sms: boolean;
+  whatsapp: boolean;
+  in_app: boolean;
+  lead_updates: boolean;
+  video_updates: boolean;
+  financial_reports: boolean;
+  social_alerts: boolean;
+  digest_frequency: 'instant' | 'hourly' | 'daily' | 'weekly';
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  updated_at?: string;
+}

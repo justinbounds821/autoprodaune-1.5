@@ -12,6 +12,7 @@ import AutomationControl from './AutomationControl';
 import SocialMedia from './SocialMedia';
 import FinancialDashboard from './FinancialDashboard';
 import LeadManagement from './LeadManagement';
+import NotificationSettings from './NotificationSettings';
 
 const queryClient = new QueryClient();
 
@@ -56,6 +57,7 @@ const AdminApp: React.FC = () => {
             <Route path="videos" element={<VideoManagement />} />
             <Route path="automation" element={<AutomationControl />} />
             <Route path="social" element={<SocialMedia />} />
+            <Route path="notifications" element={<NotificationSettings />} />
             <Route path="financial" element={<FinancialDashboard />} />
             <Route path="leads" element={<LeadManagement />} />
             <Route path="*" element={<Navigate to="dashboard" replace />} />
