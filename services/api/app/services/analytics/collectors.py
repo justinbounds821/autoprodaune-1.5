@@ -309,10 +309,18 @@ class VideoGenerationCollector(BaseMetricsCollector):
     async def _get_video_metrics_from_dependencies(self) -> Optional[Any]:
         """Extrage metricile de generare video din dependențele configurate."""
 
-        if not any([self.supabase_client, self.cache, self.video_metrics_repository, self.external_api]):
-            raise RuntimeError(
-                "Niciun provider de date configurat pentru metricile de generare video"
+        if not any(
+            [
+                self.supabase_client,
+                self.cache,
+                self.video_metrics_repository,
+                self.external_api,
+            ]
+        ):
+            logger.info(
+                "Colectorul VideoGeneration nu are provideri configurați; se întorc metrici implicite goale"
             )
+            return []
 
         data = await self._fetch_from_cache("video_generation_metrics")
         if data:
@@ -390,10 +398,18 @@ class FinancialCollector(BaseMetricsCollector):
         return metrics
 
     async def _get_financial_metrics_from_dependencies(self) -> Optional[Any]:
-        if not any([self.supabase_client, self.cache, self.financial_repository, self.accounting_api]):
-            raise RuntimeError(
-                "Niciun provider de date configurat pentru metricile financiare"
+        if not any(
+            [
+                self.supabase_client,
+                self.cache,
+                self.financial_repository,
+                self.accounting_api,
+            ]
+        ):
+            logger.info(
+                "Colectorul Financial nu are provideri configurați; se întorc metrici implicite goale"
             )
+            return []
 
         data = await self._fetch_from_cache("financial_metrics")
         if data:
