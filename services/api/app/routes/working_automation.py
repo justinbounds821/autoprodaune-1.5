@@ -10,7 +10,7 @@ from datetime import datetime
 import logging
 import os
 
-from ..core.monitoring import AUTOMATION_STATUS
+from ..core.monitoring import AUTOMATION_STATUS, DAILY_POSTS_COMPLETED
 
 router = APIRouter(
     prefix="/api/working-automation",
@@ -161,6 +161,9 @@ async def trigger_manual_post():
         # Simulate post creation
         automation_state["posts_today"] += 1
         automation_state["last_post_time"] = datetime.now().isoformat()
+        
+        # Update Prometheus gauge
+        DAILY_POSTS_COMPLETED.inc()
 
         action = {
             "action": "Manual post triggered",

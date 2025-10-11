@@ -95,14 +95,26 @@ if not any([r.path == "/health" for r in app.router.routes]):
     async def health():
         """Enhanced health check with automation status and metrics."""
         try:
-            from .services.automation_scheduler import get_automation_scheduler
-            automation = get_automation_scheduler()
+            from .core.monitoring import AUTOMATION_STATUS, DAILY_POSTS_COMPLETED
+            from prometheus_client import REGISTRY as PROM_REGISTRY
             
-            # Get automation status
-            automation_active = automation.is_active() if hasattr(automation, 'is_active') else False
+            # Read from Prometheus gauges (source of truth)
+            # Use collect() to get current values
+            automation_val = 0.0
+            posts_val = 0.0
             
-            # Get posts today from automation state
-            posts_today = automation.state.get("posts_today", 0) if hasattr(automation, 'state') else 0
+            for metric in AUTOMATION_STATUS.collect():
+                for sample in metric.samples:
+                    if sample.name == 'autoprodaune_automation_active':
+                        automation_val = sample.value
+                        
+            for metric in DAILY_POSTS_COMPLETED.collect():
+                for sample in metric.samples:
+                    if sample.name == 'autoprodaune_daily_posts_completed':
+                        posts_val = sample.value
+            
+            automation_active = bool(automation_val > 0)
+            posts_today = int(posts_val)
             
             # Calculate avg response time (simplified)
             avg_response_time_ms = 150.0
