@@ -84,6 +84,34 @@ ERROR_COUNT = Counter(
     registry=REGISTRY
 )
 
+# Video engine metrics
+VIDEO_BACKEND_AVAILABLE = Gauge(
+    'autopro_backend_available',
+    'Video backend availability (1=available, 0=unavailable)',
+    ['backend'],
+    registry=REGISTRY
+)
+
+VIDEO_PROCESSING_DURATION = Histogram(
+    'autopro_video_processing_duration_seconds',
+    'Video processing duration in seconds',
+    ['result'],
+    registry=REGISTRY
+)
+
+VIDEO_SIZE_BYTES = Histogram(
+    'autopro_video_size_bytes',
+    'Generated video file size in bytes',
+    registry=REGISTRY
+)
+
+VIDEO_QUEUE_SIZE = Gauge(
+    'autopro_queue_size',
+    'Number of videos in queue by status',
+    ['status'],
+    registry=REGISTRY
+)
+
 class MonitoringManager:
     """
     Central monitoring and logging manager for AutoPro Daune.
@@ -100,6 +128,12 @@ class MonitoringManager:
         # Performance tracking
         self.performance_data = {}
         self.start_time = time.time()
+
+        # Initialize video metrics with default values
+        VIDEO_BACKEND_AVAILABLE.labels(backend='sadtalker').set(0)
+        VIDEO_BACKEND_AVAILABLE.labels(backend='heygen').set(0)
+        VIDEO_QUEUE_SIZE.labels(status='queued').set(0)
+        VIDEO_QUEUE_SIZE.labels(status='processing').set(0)
 
         self.logger.info("✅ MonitoringManager initialized with SupabaseService integration")
 

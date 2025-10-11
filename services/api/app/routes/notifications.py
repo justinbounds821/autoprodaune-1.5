@@ -46,12 +46,12 @@ class NotificationPreferencesPayload(BaseModel):
     )
     quiet_hours_start: Optional[str] = Field(
         None,
-        regex=r"^([01]\d|2[0-3]):[0-5]\d$",
+        pattern=r"^([01]\d|2[0-3]):[0-5]\d$",
         description="Ora de start pentru quiet hours (HH:MM)",
     )
     quiet_hours_end: Optional[str] = Field(
         None,
-        regex=r"^([01]\d|2[0-3]):[0-5]\d$",
+        pattern=r"^([01]\d|2[0-3]):[0-5]\d$",
         description="Ora de final pentru quiet hours (HH:MM)",
     )
 
@@ -63,7 +63,7 @@ class NotificationPreferencesPayload(BaseModel):
             )
         return value
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_quiet_hours(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         start = values.get("quiet_hours_start")
         end = values.get("quiet_hours_end")
