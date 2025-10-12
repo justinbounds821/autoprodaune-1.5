@@ -13,34 +13,15 @@ import {
 } from '@/components/ui/select';
 import { 
   Clock, 
-  Play, 
-  Pause, 
-  Save, 
+  Settings,
   Trash2, 
   Plus,
   Calendar,
-  AlertCircle,
-  CheckCircle
+  AlertCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-interface CronJob {
-  id: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-  schedule: {
-    minute: string;
-    hour: string;
-    dayOfMonth: string;
-    month: string;
-    dayOfWeek: string;
-  };
-  action: 'post_content' | 'generate_video' | 'send_notifications' | 'backup_data';
-  platforms: string[];
-  lastRun: string | null;
-  nextRun: string;
-}
+import { getAutomationStatus, toggleAutomation, updateAutomationSchedule } from '@/lib/api';
+import type { CronJob } from '@/types/api';
 
 const CRON_PRESETS = [
   {
@@ -64,9 +45,9 @@ const CRON_PRESETS = [
     description: 'Rulează zilnic la ora 21:00'
   },
   {
-    name: 'Lunar (1 ianuarie)',
-    cron: '0 0 1 1 *',
-    description: 'Rulează anual pe 1 ianuarie'
+    name: 'Săptămânal (Luni 9:00)',
+    cron: '0 9 * * 1',
+    description: 'Rulează în fiecare luni la 9:00'
   },
   {
     name: 'Weekend (Sâmbătă și Duminică)',
@@ -88,6 +69,7 @@ export default function CronScheduleEditor() {
   const { toast } = useToast();
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const [globalEnabled, setGlobalEnabled] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJob | null>(null);
 
@@ -113,32 +95,39 @@ export default function CronScheduleEditor() {
   const loadCronJobs = async () => {
     try {
       setLoading(true);
-      // Simulated data - în producție ar fi API call
-      const mockJobs: CronJob[] = [
-        {
-          id: '1',
-          name: 'Postare Dimineață',
-          description: 'Postează conținut motivational dimineața',
-          enabled: true,
-          schedule: { minute: '0', hour: '9', dayOfMonth: '*', month: '*', dayOfWeek: '*' },
-          action: 'post_content',
-          platforms: ['TikTok', 'Instagram'],
-          lastRun: '2025-01-01T09:00:00Z',
-          nextRun: '2025-01-02T09:00:00Z'
-        },
-        {
-          id: '2',
-          name: 'Postare Seară',
-          description: 'Postează conținut informativ seara',
-          enabled: true,
-          schedule: { minute: '0', hour: '21', dayOfMonth: '*', month: '*', dayOfWeek: '*' },
-          action: 'post_content',
-          platforms: ['Facebook'],
-          lastRun: '2025-01-01T21:00:00Z',
-          nextRun: '2025-01-02T21:00:00Z'
-        }
-      ];
-      setJobs(mockJobs);
+      const response = await getAutomationStatus();
+      
+      // Map automation status to cron jobs
+      const automationJobs: CronJob[] = response.jobs?.map((job: {
+        id: string;
+        name: string;
+        enabled: boolean;
+        schedule: string;
+        last_run: string | null;
+        next_run: string;
+      }) => {
+        const scheduleParts = parseCronExpression(job.schedule);
+        return {
+          id: job.id,
+          name: job.name,
+          description: '',
+          enabled: job.enabled,
+          schedule: scheduleParts || {
+            minute: '0',
+            hour: '9',
+            dayOfMonth: '*',
+            month: '*',
+            dayOfWeek: '*'
+          },
+          action: 'post_content' as CronJob['action'],
+          platforms: ['TikTok'],
+          lastRun: job.last_run,
+          nextRun: job.next_run
+        };
+      }) || [];
+
+      setJobs(automationJobs);
+      setGlobalEnabled(response.enabled || false);
     } catch (error) {
       console.error('Failed to load cron jobs:', error);
       toast({
@@ -179,11 +168,43 @@ export default function CronScheduleEditor() {
     }
   };
 
+  const handleGlobalToggle = async (enabled: boolean) => {
+    try {
+      await toggleAutomation(enabled);
+      setGlobalEnabled(enabled);
+      
+      toast({
+        title: enabled ? "Automatizare activată" : "Automatizare dezactivată",
+        description: enabled ? "Toate job-urile sunt acum active." : "Toate job-urile au fost oprite.",
+      });
+    } catch (error) {
+      toast({
+        title: "Eroare",
+        description: "Nu s-a putut actualiza statusul automatizării.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const toggleJob = async (jobId: string) => {
     try {
       setJobs(prev => prev.map(job => 
         job.id === jobId ? { ...job, enabled: !job.enabled } : job
       ));
+      
+      // Update schedule on backend
+      const updatedJobs = jobs.map(job => 
+        job.id === jobId ? { ...job, enabled: !job.enabled } : job
+      );
+      
+      await updateAutomationSchedule({
+        jobs: updatedJobs.map(j => ({
+          id: j.id,
+          name: j.name,
+          enabled: j.enabled,
+          schedule: buildCronExpression(j.schedule)
+        }))
+      });
       
       toast({
         title: "Job actualizat",
@@ -195,6 +216,8 @@ export default function CronScheduleEditor() {
         description: "Nu s-a putut actualiza job-ul.",
         variant: "destructive",
       });
+      // Revert on error
+      loadCronJobs();
     }
   };
 
@@ -213,19 +236,26 @@ export default function CronScheduleEditor() {
         nextRun: calculateNextRun(cronExpression)
       };
 
-      if (editingJob) {
-        setJobs(prev => prev.map(job => job.id === editingJob.id ? newJob : job));
-        toast({
-          title: "Job actualizat",
-          description: `Job-ul "${newJob.name}" a fost actualizat.`,
-        });
-      } else {
-        setJobs(prev => [newJob, ...prev]);
-        toast({
-          title: "Job creat",
-          description: `Job-ul "${newJob.name}" a fost creat.`,
-        });
-      }
+      const updatedJobs = editingJob
+        ? jobs.map(job => job.id === editingJob.id ? newJob : job)
+        : [newJob, ...jobs];
+      
+      setJobs(updatedJobs);
+
+      // Update backend
+      await updateAutomationSchedule({
+        jobs: updatedJobs.map(j => ({
+          id: j.id,
+          name: j.name,
+          enabled: j.enabled,
+          schedule: buildCronExpression(j.schedule)
+        }))
+      });
+
+      toast({
+        title: editingJob ? "Job actualizat" : "Job creat",
+        description: `Job-ul "${newJob.name}" a fost ${editingJob ? 'actualizat' : 'creat'}.`,
+      });
 
       // Reset form
       setFormData({
@@ -249,7 +279,18 @@ export default function CronScheduleEditor() {
 
   const deleteJob = async (jobId: string) => {
     try {
-      setJobs(prev => prev.filter(job => job.id !== jobId));
+      const updatedJobs = jobs.filter(job => job.id !== jobId);
+      setJobs(updatedJobs);
+      
+      await updateAutomationSchedule({
+        jobs: updatedJobs.map(j => ({
+          id: j.id,
+          name: j.name,
+          enabled: j.enabled,
+          schedule: buildCronExpression(j.schedule)
+        }))
+      });
+
       toast({
         title: "Job șters",
         description: "Job-ul a fost șters cu succes.",
@@ -260,6 +301,8 @@ export default function CronScheduleEditor() {
         description: "Nu s-a putut șterge job-ul.",
         variant: "destructive",
       });
+      // Revert on error
+      loadCronJobs();
     }
   };
 
@@ -279,6 +322,27 @@ export default function CronScheduleEditor() {
 
   return (
     <div className="space-y-6">
+      {/* Global Status */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" />
+              Status Automatizare Globală
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">
+                {globalEnabled ? 'Activată' : 'Dezactivată'}
+              </span>
+              <Switch
+                checked={globalEnabled}
+                onCheckedChange={handleGlobalToggle}
+              />
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
+
       {/* Presets */}
       <Card>
         <CardHeader>
@@ -452,7 +516,6 @@ export default function CronScheduleEditor() {
 
             <div className="flex gap-2">
               <Button onClick={saveJob} disabled={!formData.name}>
-                <Save className="w-4 h-4 mr-2" />
                 {editingJob ? 'Actualizează' : 'Creează'} Job
               </Button>
               <Button 
@@ -532,13 +595,15 @@ export default function CronScheduleEditor() {
                     </div>
                   </div>
                   
-                  <p className="text-sm text-gray-600 mb-3">{job.description}</p>
+                  {job.description && (
+                    <p className="text-sm text-gray-600 mb-3">{job.description}</p>
+                  )}
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                     <div>
                       <span className="text-gray-500">Acțiune:</span>
                       <span className="ml-2 font-medium">
-                        {ACTIONS.find(a => a.value === job.action)?.label}
+                        {ACTIONS.find(a => a.value === job.action)?.label || job.action}
                       </span>
                     </div>
                     <div>
