@@ -89,6 +89,14 @@ class TikTokPoster(SocialPosterInterface):
             # Obține token-ul de acces
             access_token = self.oauth_manager.get_valid_access_token(SocialPlatform.TIKTOK)
             if not access_token:
+                try:
+                    from .supabase_client import get_supabase_service_instance  # type: ignore
+                    sb = get_supabase_service_instance()
+                    rows = sb._table_select("social_tokens", "*", filters=[("eq", "platform", "tiktok")], order_by=("updated_at", "desc")) or []
+                    access_token = rows[0].get("access_token") if rows else None
+                except Exception:
+                    access_token = None
+            if not access_token:
                 return PostResult(
                     success=False,
                     error_message="Nu s-a putut obține token-ul de acces pentru TikTok"
@@ -324,6 +332,14 @@ class TikTokPoster(SocialPosterInterface):
             
             access_token = self.oauth_manager.get_valid_access_token(SocialPlatform.TIKTOK)
             if not access_token:
+                try:
+                    from .supabase_client import get_supabase_service_instance  # type: ignore
+                    sb = get_supabase_service_instance()
+                    rows = sb._table_select("social_tokens", "*", filters=[("eq", "platform", "tiktok")], order_by=("updated_at", "desc")) or []
+                    access_token = rows[0].get("access_token") if rows else None
+                except Exception:
+                    access_token = None
+            if not access_token:
                 return PostStatus.FAILED
             
             headers = {
@@ -377,6 +393,14 @@ class TikTokPoster(SocialPosterInterface):
                 return False
             
             access_token = self.oauth_manager.get_valid_access_token(SocialPlatform.TIKTOK)
+            if not access_token:
+                try:
+                    from .supabase_client import get_supabase_service_instance  # type: ignore
+                    sb = get_supabase_service_instance()
+                    rows = sb._table_select("social_tokens", "*", filters=[("eq", "platform", "tiktok")], order_by=("updated_at", "desc")) or []
+                    access_token = rows[0].get("access_token") if rows else None
+                except Exception:
+                    access_token = None
             if not access_token:
                 return False
             

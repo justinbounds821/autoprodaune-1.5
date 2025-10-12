@@ -66,7 +66,17 @@ class SupabaseService:
         """
         Dacă primești un client din exterior (ex: pentru teste), îl folosești.
         Altfel construiește din ENV.
+
+        În FAKE_MODE, SupabaseService nu se inițializează cu adevărat.
         """
+        # Check if we're in FAKE_MODE - skip Supabase initialization
+        if os.getenv("FAKE_MODE") == "true":
+            self.sb = None
+            self.config = SBConfig(url="fake", service_key="fake", schema="public")
+            self.http = httpx.Client(timeout=10.0)
+            log.info("SupabaseService initialized in FAKE_MODE (no real connection)")
+            return
+
         if client:
             self.sb = client
             self.config = SBConfig(url="external", service_key="external", schema=os.getenv("SUPABASE_SCHEMA", "public"))
@@ -75,7 +85,7 @@ class SupabaseService:
             missing = [k for k in ("SUPABASE_URL", "SUPABASE_SERVICE_KEY") if not os.getenv(k)]
             if missing:
                 raise RuntimeError(f"Missing required env var: {', '.join(missing)}")
-            
+
             cfg = SBConfig(
                 url=_env("SUPABASE_URL"),
                 service_key=_env("SUPABASE_SERVICE_KEY"),
@@ -421,6 +431,70 @@ class SupabaseService:
     def video_queue_retry(self, job_id: str) -> Dict[str, Any]:
         self._table_update_eq("video_jobs", "id", job_id, {"status": "retry", "updated_at": utc_now_iso()})
         return {"job_id": job_id, "status": "retry"}
+    
+    def video_stats(self) -> Dict[str, Any]:
+        """Get video processing statistics."""
+        try:
+            # Get all video jobs
+            video_jobs = self._table_select("video_jobs", "*")
+            
+            # Calculate basic stats
+            total_jobs = len(video_jobs)
+            completed_jobs = len([j for j in video_jobs if j.get("status") == "completed"])
+            failed_jobs = len([j for j in video_jobs if j.get("status") == "failed"])
+            processing_jobs = len([j for j in video_jobs if j.get("status") == "processing"])
+            queued_jobs = len([j for j in video_jobs if j.get("status") == "queued"])
+            
+            # Calculate success rate
+            success_rate = (completed_jobs / total_jobs * 100) if total_jobs > 0 else 0
+            
+            # Calculate average processing time for completed jobs
+            completed_with_duration = [j for j in video_jobs if j.get("status") == "completed" and j.get("duration_seconds")]
+            avg_duration = sum([j.get("duration_seconds", 0) for j in completed_with_duration]) / len(completed_with_duration) if completed_with_duration else 0
+            
+            # Calculate total file size for completed jobs
+            total_file_size = sum([j.get("file_size_mb", 0) for j in video_jobs if j.get("status") == "completed"])
+            
+            # Get recent jobs (last 7 days)
+            from datetime import datetime, timedelta
+            week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+            recent_jobs = [j for j in video_jobs if j.get("created_at", "") >= week_ago]
+            
+            # Jobs by type (if available)
+            jobs_by_type = {}
+            for job in video_jobs:
+                job_type = job.get("type", "unknown")
+                jobs_by_type[job_type] = jobs_by_type.get(job_type, 0) + 1
+            
+            return {
+                "total_jobs": total_jobs,
+                "completed_jobs": completed_jobs,
+                "failed_jobs": failed_jobs,
+                "processing_jobs": processing_jobs,
+                "queued_jobs": queued_jobs,
+                "success_rate": round(success_rate, 2),
+                "average_duration_seconds": round(avg_duration, 2),
+                "total_file_size_mb": round(total_file_size, 2),
+                "recent_jobs_7d": len(recent_jobs),
+                "jobs_by_type": jobs_by_type,
+                "last_updated": utc_now_iso()
+            }
+        except Exception as e:
+            logging.error(f"Error calculating video stats: {e}")
+            return {
+                "error": str(e),
+                "total_jobs": 0,
+                "completed_jobs": 0,
+                "failed_jobs": 0,
+                "processing_jobs": 0,
+                "queued_jobs": 0,
+                "success_rate": 0,
+                "average_duration_seconds": 0,
+                "total_file_size_mb": 0,
+                "recent_jobs_7d": 0,
+                "jobs_by_type": {},
+                "last_updated": utc_now_iso()
+            }
     
     # -----------------------------
     # Logs & notifications

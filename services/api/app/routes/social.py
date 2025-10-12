@@ -83,29 +83,62 @@ async def get_recent_posts(
 ) -> Dict[str, Any]:
     """
     Obține postările recente de pe social media din Supabase.
-    
+
     Args:
         platform: Platforma specifică (opțional)
         limit: Numărul maxim de postări
-        
+
     Returns:
         Dicționar cu postările recente
     """
+    if os.getenv("FAKE_MODE") == "true":
+        platforms_list = ["tiktok", "instagram", "youtube"]
+        mock_posts = [
+            {
+                "id": i,
+                "platform": platforms_list[i % 3],
+                "content": f"Mock social media post {i}: Amazing content about auto insurance tips and tricks",
+                "media_url": f"https://example.com/media/video_{i}.mp4",
+                "media_type": "video" if i % 2 == 0 else "image",
+                "engagement": 150 + (i * 25),
+                "views": 5000 + (i * 500),
+                "likes": 120 + (i * 10),
+                "comments": 15 + (i * 2),
+                "shares": 8 + i,
+                "revenue": round(12.50 + (i * 1.25), 2),
+                "status": "published" if i <= 15 else "draft",
+                "posted_at": (datetime.now() - timedelta(days=i)).isoformat(),
+                "created_at": (datetime.now() - timedelta(days=i, hours=2)).isoformat()
+            }
+            for i in range(1, min(limit + 1, 21))
+        ]
+
+        # Filter by platform if specified
+        if platform:
+            mock_posts = [post for post in mock_posts if post["platform"] == platform.lower()]
+
+        return {
+            "posts": mock_posts[:limit],
+            "total": len(mock_posts),
+            "platform": platform,
+            "limit": limit
+        }
+
     try:
         # Obține postările din Supabase
         posts = get_supabase_service_instance()._table_select("social_posts", "*", order=("posted_at", True))
-        
+
         # Filtrează după platformă dacă este specificată
         if platform:
             posts = [post for post in posts if post.get("platform") == platform.lower()]
-        
+
         return {
             "posts": posts[:limit],
             "total": len(posts),
             "platform": platform,
             "limit": limit
         }
-        
+
     except Exception as e:
         logging.error(f"Eroare la obținerea postărilor: {e}")
         raise HTTPException(status_code=500, detail=f"Eroare la postări: {str(e)}")

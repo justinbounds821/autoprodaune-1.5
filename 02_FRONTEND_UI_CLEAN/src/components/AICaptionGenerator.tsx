@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
@@ -18,10 +17,11 @@ import {
   Check,
   Hash,
   Heart,
-  MessageSquare,
-  Share2
+  MessageSquare
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { generateCaption } from '@/lib/api';
+import type { CaptionGenerationResponse } from '@/types/api';
 
 interface CaptionOptions {
   tone: 'professional' | 'casual' | 'funny' | 'inspiring' | 'urgent';
@@ -29,15 +29,6 @@ interface CaptionOptions {
   includeHashtags: boolean;
   maxLength: number;
   topic: string;
-}
-
-interface GeneratedCaption {
-  caption: string;
-  hashtags: string[];
-  engagement: {
-    estimated: number;
-    factors: string[];
-  };
 }
 
 const TONE_EXAMPLES = {
@@ -74,7 +65,7 @@ export default function AICaptionGenerator() {
     maxLength: 300,
     topic: ''
   });
-  const [generatedCaption, setGeneratedCaption] = useState<GeneratedCaption | null>(null);
+  const [generatedCaption, setGeneratedCaption] = useState<CaptionGenerationResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -90,10 +81,39 @@ export default function AICaptionGenerator() {
 
     try {
       setLoading(true);
+      // Real backend caption generation (no external AI key required)
+      const resp = await fetch('/api/social/caption', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: options.topic,
+          tone: options.tone,
+          platform: options.platform.toLowerCase(),
+          include_hashtags: options.includeHashtags,
+          max_length: options.maxLength,
+        })
+      });
+      if (!resp.ok) throw new Error('Server error generating caption');
+      const data = await resp.json();
+      setGeneratedCaption({
+        caption: data.caption,
+        hashtags: data.hashtags || [],
+        engagement: data.engagement || { estimated: 0, factors: [] },
+      });
+      toast({ title: 'Caption generat!', description: 'Caption generat de backend intern.' });
+      setLoading(false);
+      return;
       
-      // Simulated AI generation - în producție ar fi API call către OpenAI
-      const mockCaption = generateMockCaption(options);
-      setGeneratedCaption(mockCaption);
+      // Call real API endpoint
+      const response = await generateCaption({
+        topic: options.topic,
+        tone: options.tone,
+        platform: options.platform,
+        include_hashtags: options.includeHashtags,
+        max_length: options.maxLength
+      });
+
+      setGeneratedCaption(response);
       
       toast({
         title: "Caption generat!",
@@ -104,75 +124,12 @@ export default function AICaptionGenerator() {
       console.error('Caption generation failed:', error);
       toast({
         title: "Eroare",
-        description: "Nu s-a putut genera caption-ul.",
+        description: "Nu s-a putut genera caption-ul. Verifică conexiunea la backend.",
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateMockCaption = (opts: CaptionOptions): GeneratedCaption => {
-    const baseCaptions = {
-      professional: `Aveți un accident auto? Nu lăsați lucrurile să se complice! 
-      
-      Echipa noastră de experți vă ajută să obțineți compensația cuvenită pentru daunele auto. 
-
-      ✅ Expertize gratuite
-      ✅ Consultanță juridică
-      ✅ Negociere cu asigurătorii
-      ✅ Suport complet proces
-
-      Contactați-ne acum pentru o evaluare gratuită!`,
-
-      casual: `Hey! Știai că după un accident auto ai drepturi? 🚗
-
-      Nu te lăsa păcălit de asigurători! Noi te ajutăm să obții ce îți revine.
-
-      🆓 Expertiză gratuită
-      📞 Răspundem rapid
-      💪 Luptăm pentru tine
-
-      Dă-ne un mesaj să vorbim!`,
-
-      funny: `Accident auto? Been there, done that! 😅
-
-      Dar știi ce nu am făcut? Să mă las păcălit de asigurătorii care încearcă să mă facă să cred că o zgârietură valorează 50 de lei! 
-
-      Noi îi facem să plătească ce trebuie! 💪
-
-      #AccidentAuto #DauneAuto #NuMaPacalesc`,
-    };
-
-    const hashtags = generateHashtags(opts);
-    const caption = baseCaptions[opts.tone] || baseCaptions.professional;
-
-    return {
-      caption: opts.includeHashtags ? `${caption}\n\n${hashtags.join(' ')}` : caption,
-      hashtags,
-      engagement: {
-        estimated: Math.floor(Math.random() * 1000) + 500,
-        factors: ['Topic trending', 'Hashtags relevante', 'Call-to-action clar']
-      }
-    };
-  };
-
-  const generateHashtags = (opts: CaptionOptions): string[] => {
-    const baseHashtags = ['#AutoProDaune', '#AccidenteAuto', '#DauneAuto'];
-    
-    const topicHashtags = {
-      'Accidente auto': ['#Accident', '#Auto'],
-      'Daune auto': ['#Daune', '#Reparatie'],
-      'Asigurări': ['#Asigurari', '#Asigurator'],
-      'Reparații auto': ['#Reparatie', '#Service'],
-      'Servicii juridice': ['#Avocat', '#Drept'],
-      'Compensatii': ['#Compensatie', '#Banii'],
-      'Expertize auto': ['#Expertiza', '#Evaluare'],
-      'Consultanță legală': ['#Consultanta', '#Legal']
-    };
-
-    const additional = topicHashtags[opts.topic as keyof typeof topicHashtags] || ['#Auto', '#Daune'];
-    return [...baseHashtags, ...additional].slice(0, PLATFORM_LIMITS[opts.platform].hashtags);
   };
 
   const handleCopy = async () => {
@@ -352,7 +309,7 @@ export default function AICaptionGenerator() {
               </div>
 
               {/* Hashtags */}
-              {generatedCaption.hashtags.length > 0 && (
+              {generatedCaption.hashtags && generatedCaption.hashtags.length > 0 && (
                 <div>
                   <p className="text-sm font-medium mb-2 flex items-center gap-2">
                     <Hash className="w-4 h-4" />
@@ -369,31 +326,33 @@ export default function AICaptionGenerator() {
               )}
 
               {/* Engagement Prediction */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Heart className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm font-medium">Engagement Estimat</span>
+              {generatedCaption.engagement && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Heart className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-medium">Engagement Estimat</span>
+                    </div>
+                    <p className="text-lg font-bold text-blue-600">
+                      {generatedCaption.engagement.estimated}
+                    </p>
                   </div>
-                  <p className="text-lg font-bold text-blue-600">
-                    {generatedCaption.engagement.estimated}
-                  </p>
-                </div>
 
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <MessageSquare className="w-4 h-4 text-green-600" />
-                    <span className="text-sm font-medium">Factori Pozitivi</span>
-                  </div>
-                  <div className="space-y-1">
-                    {generatedCaption.engagement.factors.map(factor => (
-                      <div key={factor} className="text-xs text-green-600">
-                        • {factor}
-                      </div>
-                    ))}
+                  <div className="p-3 bg-green-50 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MessageSquare className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium">Factori Pozitivi</span>
+                    </div>
+                    <div className="space-y-1">
+                      {generatedCaption.engagement.factors?.map(factor => (
+                        <div key={factor} className="text-xs text-green-600">
+                          • {factor}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>

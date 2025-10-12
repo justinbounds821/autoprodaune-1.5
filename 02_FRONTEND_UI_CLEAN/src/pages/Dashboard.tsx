@@ -123,7 +123,7 @@ const Dashboard = () => {
         // Load overview stats for admin
         try {
           const overviewResponse = await AutoProApiService.getOverviewStats();
-          if (overviewResponse.success && overviewResponse.data) {
+          if (overviewResponse.data || overviewResponse.total_leads !== undefined) {
             setOverviewStats(overviewResponse.data);
           }
         } catch (overviewError) {

@@ -21,7 +21,17 @@ class YouTubeAPIClient:
         return self.oauth_manager.is_token_valid(SocialPlatform.YOUTUBE)
 
     def get_access_token(self) -> Optional[str]:
-        return self.oauth_manager.get_valid_access_token(SocialPlatform.YOUTUBE)
+        token = self.oauth_manager.get_valid_access_token(SocialPlatform.YOUTUBE)
+        if token:
+            return token
+        # Fallback: try loading latest token from DB (social_tokens)
+        try:
+            from ..supabase_client import get_supabase_service_instance  # type: ignore
+            sb = get_supabase_service_instance()
+            rows = sb._table_select("social_tokens", "*", filters=[("eq", "platform", "youtube")], order_by=("updated_at", "desc")) or []
+            return rows[0].get("access_token") if rows else None
+        except Exception:
+            return None
 
     # --- http helpers ---
     @staticmethod

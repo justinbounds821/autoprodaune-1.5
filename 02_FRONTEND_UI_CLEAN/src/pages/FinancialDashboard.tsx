@@ -84,8 +84,8 @@ const FinancialDashboard: React.FC = () => {
     try {
       const response = await AutoProApiService.getRevenueData();
 
-      if (response.success && response.data) {
-        setRevenueData(response.data);
+      if (response.data || response.revenue !== undefined) {
+        setRevenueData(response.data || response);
       } else {
         console.error('Failed to load revenue data:', response.error);
       }
@@ -98,8 +98,8 @@ const FinancialDashboard: React.FC = () => {
     try {
       const response = await AutoProApiService.getCostData();
 
-      if (response.success && response.data) {
-        setCostData(response.data);
+      if (response.data || response.costs !== undefined) {
+        setCostData(response.data || response);
       } else {
         console.error('Failed to load cost data:', response.error);
       }

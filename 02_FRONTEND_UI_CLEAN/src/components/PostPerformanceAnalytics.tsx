@@ -21,13 +21,20 @@ interface PostPerformanceAnalyticsProps {
   posts: PostMetrics[];
 }
 
+interface ChartData {
+  name: string;
+  value: number;
+  [key: string]: string | number;
+}
+
 export default function PostPerformanceAnalytics({ posts }: PostPerformanceAnalyticsProps) {
   const [topPosts, setTopPosts] = useState<PostMetrics[]>([]);
-  const [platformStats, setPlatformStats] = useState<any[]>([]);
-  const [engagementTrend, setEngagementTrend] = useState<any[]>([]);
+  const [platformStats, setPlatformStats] = useState<ChartData[]>([]);
+  const [engagementTrend, setEngagementTrend] = useState<ChartData[]>([]);
 
   useEffect(() => {
     analyzePerformance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [posts]);
 
   const analyzePerformance = () => {

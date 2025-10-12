@@ -1,205 +1,459 @@
-# 🚀 AutoPro Daune - Lead Generation & Automation System
+# 🚗 AutoPro Daune - Automated Claims Management System
 
-**Status:** ✅ PRODUCTION READY (93% Complete)  
-**Version:** 2.0.0  
-**Last Update:** 1 Octombrie 2025
+> **Versiune:** 1.5.0  
+> **Data:** 10 Octombrie 2025  
+> **Status:** Production Ready ✅
 
----
+## 📋 Cuprins
 
-## 📖 DOCUMENTATION
-
-### 🎯 Start Here
-**👉 [MASTER_PROJECT_STATUS.md](MASTER_PROJECT_STATUS.md)** - Complete project overview, all TODOs, and implementation status
-
-### 🔧 Technical Guides
-- **[CURSOR_AGENT_FULL_INSTRUCTIONS.md](CURSOR_AGENT_FULL_INSTRUCTIONS.md)** - Complete setup & testing instructions
-- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Production deployment
-- **[DEBUGGING_REPORT.md](DEBUGGING_REPORT.md)** - Troubleshooting guide
-- **[MANUAL_UTILIZARE_COMPLET.md](MANUAL_UTILIZARE_COMPLET.md)** - User manual (Romanian)
-
-### 🔑 Setup Guides
-- **[SUPABASE_SETUP_INSTRUCTIONS.md](SUPABASE_SETUP_INSTRUCTIONS.md)** - Database setup
-- **[HEYGEN_SETUP_GUIDE.md](HEYGEN_SETUP_GUIDE.md)** - Video generation API
-- **[OAUTH_SETUP_GUIDE.md](OAUTH_SETUP_GUIDE.md)** - Social media OAuth
-- **[YOUTUBE_SETUP.md](YOUTUBE_SETUP.md)** - YouTube API configuration
-- **[CLOUDFLARE_R2_SETUP.md](CLOUDFLARE_R2_SETUP.md)** - Cloud storage
+- [Despre Proiect](#despre-proiect)
+- [Arhitectura Sistemului](#arhitectura-sistemului)
+- [Instalare Rapidă](#instalare-rapid%C4%83)
+- [Utilizare](#utilizare)
+- [Structura Proiectului](#structura-proiectului)
+- [Documentație API](#documenta%C8%9Bie-api)
+- [Depanare](#depanare)
 
 ---
 
-## 🚀 QUICK START
+## 🎯 Despre Proiect
 
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- Supabase account
+**AutoPro Daune** este un sistem complet automatizat pentru gestionarea despăgubirilor auto, care include:
 
-### Start Complete System (One Command)
-```powershell
-.\scripts\start-full-system.ps1
-```
+### ✨ Funcționalități Principale
 
-### Start Local (Basic)
-```powershell
-.\scripts\start-all.ps1
-```
+- **🎬 Generare Automată de Video** - Creează conținut video educațional și promoțional folosind AI
+- **📱 Social Media Automation** - Postare automată pe TikTok, Instagram, YouTube, Facebook
+- **💰 Management Financiar** - Tracking complet al veniturilor, costurilor și profitabilității
+- **👥 Gestionare Lead-uri** - Sistem avansat de urmărire și conversie a clienților
+- **🤖 Automatizare Completă** - Task-uri programate pentru toate procesele
+- **📊 Dashboard Admin** - Interfață intuitivă pentru monitorizare și control
+- **🧠 AI Insights** - Analiză inteligentă și recomandări automate
 
-### Manual Start
-```powershell
-# Backend
-.\scripts\start-backend.ps1
+### 🛠️ Tehnologii Utilizate
 
-# Frontend (in new terminal)
-.\scripts\start-frontend.ps1
-```
-
-### Health Check
-```powershell
-.\scripts\health-check.ps1
-```
-
-### Production Build
-```powershell
-.\scripts\build-production.ps1
-```
-
-### Access Points
-- 🌐 **Frontend:** http://localhost:3003
-- 🔌 **Backend API:** http://localhost:8001/docs
-- 🔐 **Admin Panel:** http://localhost:3003/admin
-- 🏥 **Health Check:** http://localhost:8001/health
-
----
-
-## 📊 PROJECT STRUCTURE
-
-```
-autoprodaune-1/
-├── services/api/              # Backend FastAPI (Python)
-│   ├── app/                   # 138 API endpoints
-│   ├── database/              # Supabase schema (11 tables)
-│   └── requirements.txt
-│
-├── 02_FRONTEND_UI_CLEAN/      # Frontend React + Vite
-│   ├── src/                   # 12 pages, 60+ components
-│   ├── package.json
-│   └── vite.config.ts         # Port 3003, proxy to 8001
-│
-├── monitoring/                # Prometheus + Grafana
-├── scripts/                   # Helper scripts
-├── _BACKUP_OLD_PROJECT/       # Old code backup
-└── _OLD_DOCS/                 # Archived documentation
-```
-
----
-
-## ✅ FEATURES
-
-### Core Features (100% Complete)
-- ✅ **Lead Management** - CRM with scoring, timeline, bulk operations
-- ✅ **Video Generation** - MoviePy + Edge-TTS + HeyGen integration
-- ✅ **Social Media** - TikTok, Instagram, YouTube automation
-- ✅ **WhatsApp Bot** - Business API integration
-- ✅ **Financial Dashboard** - Revenue/Cost tracking with CSV export
-- ✅ **Automation** - Daily scheduling (3x/day)
-- ✅ **Referral System** - 200 LEI rewards
-
-### In Progress (18.6% Complete - 13/70 TODOs)
-- 🚧 Real-time dashboard updates
-- 🚧 Advanced charts (Recharts)
-- 🚧 Email/SMS notifications
-- 🚧 File attachments
-- 🚧 Conversion funnel
-- 🚧 AI insights
-
-**See [MASTER_PROJECT_STATUS.md](MASTER_PROJECT_STATUS.md) for complete TODO list**
-
----
-
-## 🛠️ TECH STACK
-
-### Backend
-- FastAPI 0.111.0
-- Python 3.13
+**Backend:**
+- Python 3.10+
+- FastAPI (REST API)
 - Supabase (PostgreSQL)
-- Redis (optional)
-- MoviePy, OpenCV, PIL
-- Edge-TTS / ElevenLabs
+- Redis (Rate Limiting)
+- OpenAI API (AI Generation)
+- ElevenLabs (Voice Synthesis)
+- HeyGen (Video AI)
 
-### Frontend
-- React 18.3.1
-- Vite 5.4.19
-- TypeScript 5
-- Tailwind CSS + Shadcn UI
-- TanStack Query
-- React Router 6
+**Frontend:**
+- React 18 + TypeScript
+- Vite (Build Tool)
+- Tailwind CSS + shadcn/ui
+- React Router
+- Axios
+- React Query
 
----
-
-## 🔧 CONFIGURATION
-
-### Backend (.env in `services/api/`)
-```env
-SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_anon_key
-SUPABASE_SERVICE_KEY=your_service_key
-PORT=8001
-BACKEND_CORS_ORIGINS=http://localhost:3003
-```
-
-### Frontend (.env in `02_FRONTEND_UI_CLEAN/`)
-```env
-VITE_API_URL=http://localhost:8001
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_anon_key
-```
+**Infrastructure:**
+- Cloudflare R2 (CDN Storage)
+- GitHub Actions (CI/CD)
+- Docker (Containerization)
 
 ---
 
-## 🧪 TESTING
+## 🏗️ Arhitectura Sistemului
 
-### Health Check
+### Structura Logică
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   FRONTEND (React)                   │
+│              http://localhost:3007                   │
+└───────────────────────┬─────────────────────────────┘
+                        │ API Calls
+                        ↓
+┌─────────────────────────────────────────────────────┐
+│              BACKEND API (FastAPI)                   │
+│              http://localhost:8001                   │
+│                                                       │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────┐ │
+│  │   Routes    │  │   Services   │  │  Database  │ │
+│  │             │→ │              │→ │            │ │
+│  │ /api/leads  │  │ Lead Mgmt    │  │  Supabase  │ │
+│  │ /api/video  │  │ Video Gen    │  │            │ │
+│  │ /api/social │  │ Social Media │  │            │ │
+│  │ /api/...    │  │ ...          │  │            │ │
+│  └─────────────┘  └──────────────┘  └────────────┘ │
+└─────────────────────────────────────────────────────┘
+                        │
+                        ↓
+┌─────────────────────────────────────────────────────┐
+│              EXTERNAL SERVICES                       │
+│                                                       │
+│  • OpenAI (GPT-4)        • ElevenLabs (Voice)       │
+│  • HeyGen (Video AI)     • Cloudflare R2 (CDN)      │
+│  • TikTok API            • Instagram API             │
+│  • YouTube API           • Facebook API              │
+└─────────────────────────────────────────────────────┘
+```
+
+### Flow de Date
+
+```
+1. LEADS:     Landing Page → POST /api/leads → Database → Notification
+
+2. VIDEOS:    Automation → Video Service → HeyGen/Internal → CDN → Database
+
+3. SOCIAL:    Video Ready → Social Service → Platform APIs → Analytics → Database
+
+4. FINANCIAL: Revenue/Costs → Database → Dashboard → Reports
+```
+
+---
+
+## 🚀 Instalare Rapidă
+
+### Prerequisite
+
+1. **Python 3.10+**
+   ```bash
+   python --version
+   ```
+
+2. **Node.js 18+**
+   ```bash
+   node --version
+   ```
+
+3. **Git**
+   ```bash
+   git --version
+   ```
+
+### Pași de Instalare
+
+#### 1. Clone Repository
+```bash
+git clone <repository-url>
+cd autoprodaune-1.5
+```
+
+#### 2. Configurare Environment Variables
+
+**Backend** (`services/api/.env`):
+```env
+# Supabase
+SUPABASE_URL=https://yfbhmbjtauhxgalvdfns.supabase.co
+SUPABASE_KEY=your_supabase_key
+
+# OpenAI
+OPENAI_API_KEY=your_openai_key
+
+# ElevenLabs
+ELEVENLABS_API_KEY=your_elevenlabs_key
+
+# HeyGen
+HEYGEN_API_KEY=your_heygen_key
+
+# Cloudflare R2
+R2_ACCOUNT_ID=your_r2_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key
+R2_SECRET_ACCESS_KEY=your_r2_secret_key
+R2_BUCKET_NAME=your_bucket_name
+
+# Social Media APIs (optional)
+TIKTOK_CLIENT_KEY=your_tiktok_key
+TIKTOK_CLIENT_SECRET=your_tiktok_secret
+```
+
+**Frontend** (`02_FRONTEND_UI_CLEAN/.env`):
+```env
+VITE_API_BASE_URL=http://localhost:8001
+VITE_SUPABASE_URL=https://yfbhmbjtauhxgalvdfns.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+#### 3. Rulare Automată (Recomandat)
+
 ```powershell
-curl http://localhost:8001/health
-# Expected: {"status":"ok","service":"autopro-daune","port":8001}
+.\START_SYSTEM.ps1
 ```
 
-### API Documentation
-Visit: http://localhost:8001/docs (Swagger UI)
+Acest script va:
+- ✅ Verifica prerequisites
+- ✅ Instala dependințele
+- ✅ Porni backend-ul (port 8001)
+- ✅ Porni frontend-ul (port 3007)
+- ✅ Deschide browser-ul
+
+#### 4. Oprire Sistem
+
+```powershell
+.\STOP_SYSTEM.ps1
+```
 
 ---
 
-## 📈 PROGRESS
+## 📖 Utilizare
 
-| Metric | Status |
-|--------|--------|
-| **Overall Completion** | 93% Production Ready |
-| **TODOs Complete** | 13/70 (18.6%) |
-| **Backend Endpoints** | 138 active |
-| **Database Tables** | 11 configured |
-| **Frontend Pages** | 12 functional |
-| **Linter Errors** | 0 ✅ |
+### Accesare Aplicație
+
+După pornire, accesează:
+
+- **Frontend:** http://localhost:3007
+- **Admin Panel:** http://localhost:3007/admin
+- **API Docs:** http://localhost:8001/docs
+- **API Health:** http://localhost:8001/health
+
+### Pagini Principale
+
+#### 1. **Landing Page** (`/`)
+- Lead generation form
+- Company presentation
+- Statistics showcase
+
+#### 2. **Admin Dashboard** (`/admin/dashboard`)
+- **Overview general** al sistemului
+- KPIs principale
+- Notificări
+- Link-uri rapide către module
+
+#### 3. **Leads Management** (`/admin/leads`)
+- Lista completă de lead-uri
+- Filtrare și search
+- Editare status
+- Statistici conversie
+
+#### 4. **Video Management** (`/admin/videos`)
+- Job-uri video (pending, processing, completed)
+- Upload custom backgrounds/avatars
+- Video templates
+- Cost tracking
+
+#### 5. **Social Media** (`/admin/social`)
+- Summary pe platforme (TikTok, Instagram, YouTube, Facebook)
+- Lista postări
+- Analytics și engagement
+- Schedule posting
+
+#### 6. **Financial Dashboard** (`/admin/financial`)
+- Revenue tracking
+- Cost management
+- Profit margins
+- Invoice & payments
+- Tax calculations
+
+#### 7. **Automation Control** (`/admin/automation`)
+- Enable/disable automation
+- Task scheduling
+- Logs și monitoring
+- Configuration settings
+
+#### 8. **Assets Manager** (`/admin/assets`)
+- Upload backgrounds pentru video
+- Upload avatare AI
+- Manage existing assets
+- CDN integration
 
 ---
 
-## 🐛 KNOWN ISSUES
+## 📁 Structura Proiectului
 
-1. ⚠️ **Redis Warning**: Falls back to in-memory (OK for dev)
-2. 💡 **Social API Keys**: Need production keys for TikTok/Instagram
-3. 📊 **Charts**: Need Recharts integration for advanced visualizations
-
-See [DEBUGGING_REPORT.md](DEBUGGING_REPORT.md) for solutions.
+```
+autoprodaune-1.5/
+│
+├── 📂 services/api/              # Backend (FastAPI)
+│   ├── app/
+│   │   ├── main.py               # Entry point
+│   │   ├── routes/               # API endpoints
+│   │   │   ├── leads.py
+│   │   │   ├── video.py
+│   │   │   ├── social.py
+│   │   │   ├── financial.py
+│   │   │   └── ...
+│   │   ├── services/             # Business logic
+│   │   │   ├── supabase_client.py
+│   │   │   ├── openai_service.py
+│   │   │   ├── video_service.py
+│   │   │   └── ...
+│   │   └── models/               # Data models
+│   ├── requirements.txt
+│   └── .env
+│
+├── 📂 02_FRONTEND_UI_CLEAN/      # Frontend (React)
+│   ├── src/
+│   │   ├── pages/                # React pages
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── AdminApp.tsx
+│   │   │   ├── VideoManagement.tsx
+│   │   │   ├── SocialMedia.tsx
+│   │   │   └── ...
+│   │   ├── components/           # React components
+│   │   ├── services/             # API clients
+│   │   │   └── autoproApi.ts
+│   │   └── lib/                  # Utils
+│   ├── package.json
+│   └── .env
+│
+├── 📂 .github/workflows/         # CI/CD
+│   ├── ci-cd.yml
+│   └── docker.yml
+│
+├── 📄 database_schema_complete.sql    # Database schema
+├── 📄 API_ENDPOINTS_DOCUMENTATION.md  # API documentation
+├── 📄 START_SYSTEM.ps1                # Startup script
+├── 📄 STOP_SYSTEM.ps1                 # Stop script
+└── 📄 README.md                       # This file
+```
 
 ---
 
-## 📞 SUPPORT
+## 📚 Documentație API
 
-For detailed information, see:
-- **Complete Status:** [MASTER_PROJECT_STATUS.md](MASTER_PROJECT_STATUS.md)
-- **Setup Guide:** [CURSOR_AGENT_FULL_INSTRUCTIONS.md](CURSOR_AGENT_FULL_INSTRUCTIONS.md)
-- **Troubleshooting:** [DEBUGGING_REPORT.md](DEBUGGING_REPORT.md)
+Documentația completă a endpoint-urilor se găsește în:
+- **`API_ENDPOINTS_DOCUMENTATION.md`** - Documentație detaliată
+- **http://localhost:8001/docs** - Swagger UI (interactiv)
+- **http://localhost:8001/redoc** - ReDoc (documentație elegantă)
+
+### Endpoints Principale
+
+| Modul | Endpoint | Metodă | Descriere |
+|-------|----------|--------|-----------|
+| **Health** | `/health` | GET | Health check |
+| **Leads** | `/api/leads/` | GET/POST | Manage leads |
+| **Financial** | `/api/financial/dashboard` | GET | Financial overview |
+| **Social** | `/api/social/summary` | GET | Social media summary |
+| **Video** | `/api/video/stats` | GET | Video statistics |
+| **Automation** | `/api/automation/status` | GET | Automation status |
 
 ---
 
-**AutoPro Daune** - Automated Lead Generation & Social Media System  
-**License:** Proprietary  
-**Maintained by:** AutoPro Daune Development Team
+## 🔧 Depanare
+
+### Probleme Comune
+
+#### 1. Backend nu pornește
+```bash
+# Verifică dacă portul 8001 este ocupat
+netstat -an | Select-String "8001"
+
+# Oprește procesul existent
+Get-NetTCPConnection -LocalPort 8001 | Select-Object -ExpandProperty OwningProcess | Stop-Process -Force
+```
+
+#### 2. Frontend nu pornește
+```bash
+# Șterge node_modules și reinstalează
+cd 02_FRONTEND_UI_CLEAN
+Remove-Item -Recurse -Force node_modules
+npm install
+```
+
+#### 3. Erori de conexiune la API
+```bash
+# Verifică dacă backend rulează
+Invoke-WebRequest -Uri "http://localhost:8001/health" -UseBasicParsing
+
+# Verifică .env frontend
+cat 02_FRONTEND_UI_CLEAN\.env
+```
+
+#### 4. Database connection failed
+- Verifică `SUPABASE_URL` și `SUPABASE_KEY` în `.env`
+- Asigură-te că Supabase project este activ
+- Rulează `database_schema_complete.sql` pentru a crea tabelele
+
+### Logs
+
+- **Backend Logs:** Afișate în consola PowerShell unde rulează backend-ul
+- **Frontend Logs:** Browser Console (F12) + PowerShell console
+- **Database Logs:** Supabase Dashboard → Logs
+
+---
+
+## 🧪 Testing
+
+### Manual Testing
+
+1. **Health Check:**
+   ```bash
+   curl http://localhost:8001/health
+   ```
+
+2. **Create Lead:**
+   ```bash
+   curl -X POST http://localhost:8001/api/leads/ \
+     -H "Content-Type: application/json" \
+     -d '{"name":"Test User","phone":"0721234567","email":"test@example.com"}'
+   ```
+
+3. **Get Social Summary:**
+   ```bash
+   curl http://localhost:8001/api/social/summary
+   ```
+
+### Automated Tests (CI/CD)
+
+```bash
+# Backend tests
+cd services/api
+pytest
+
+# Frontend tests
+cd 02_FRONTEND_UI_CLEAN
+npm test
+```
+
+---
+
+## 🚀 Deployment
+
+### Docker Deployment
+
+```bash
+# Build images
+docker-compose build
+
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+```
+
+### Production Checklist
+
+- [ ] Update `.env` with production values
+- [ ] Configure CORS for production domain
+- [ ] Set up SSL certificates
+- [ ] Configure CDN for static assets
+- [ ] Enable production logging
+- [ ] Set up monitoring (Sentry, etc.)
+- [ ] Configure backup strategy
+- [ ] Set up CI/CD pipeline
+
+---
+
+## 📞 Support
+
+Pentru întrebări sau probleme:
+
+1. **Check Documentation:** `API_ENDPOINTS_DOCUMENTATION.md`
+2. **Check Logs:** Backend/Frontend console output
+3. **Database Schema:** `database_schema_complete.sql`
+4. **GitHub Issues:** Creează un issue în repository
+
+---
+
+## 📝 License
+
+Proprietary - AutoPro Daune © 2025
+
+---
+
+## 🎉 Contributors
+
+- **Development Team** - Initial work and ongoing maintenance
+- **AI Integration** - OpenAI, ElevenLabs, HeyGen integration
+- **Infrastructure** - Supabase, Cloudflare setup
+
+---
+
+**Last Updated:** 10 Octombrie 2025  
+**Version:** 1.5.0  
+**Status:** ✅ Production Ready

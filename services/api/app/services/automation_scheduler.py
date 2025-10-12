@@ -113,6 +113,13 @@ class AutomationScheduler:
         self._scheduler_thread = threading.Thread(target=self._run_scheduler, daemon=True)
         self._scheduler_thread.start()
 
+        # Update monitoring gauge (lazy import to avoid cycles)
+        try:
+            from ..core.monitoring import get_monitoring  # type: ignore
+            get_monitoring().update_automation_status(True)
+        except Exception:
+            pass
+
         logger.info("✅ Automation scheduler started successfully")
 
     def stop(self):
@@ -125,6 +132,13 @@ class AutomationScheduler:
 
         self._is_running = False
         schedule.clear()
+
+        # Update monitoring gauge
+        try:
+            from ..core.monitoring import get_monitoring  # type: ignore
+            get_monitoring().update_automation_status(False)
+        except Exception:
+            pass
 
         if self._scheduler_thread:
             self._scheduler_thread.join(timeout=5)

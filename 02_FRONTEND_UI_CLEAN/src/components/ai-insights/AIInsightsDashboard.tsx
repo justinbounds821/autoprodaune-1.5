@@ -5,7 +5,7 @@
  * Uses Manager/ViewModel/UI pattern ✅
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { AIInsightsManager } from './AIInsightsManager';
 import { AIInsightsViewModel } from './AIInsightsViewModel';
@@ -15,8 +15,8 @@ export default function AIInsightsDashboard() {
   const { toast } = useToast();
   
   // Dependency Injection - Clean Architecture ✅
-  const manager = new AIInsightsManager();
-  const viewModel = new AIInsightsViewModel(manager);
+  const manager = useMemo(() => new AIInsightsManager(), []);
+  const viewModel = useMemo(() => new AIInsightsViewModel(manager), [manager]);
   
   // UI State Management
   const [state, setState] = React.useState(viewModel.getState());
@@ -42,7 +42,7 @@ export default function AIInsightsDashboard() {
     viewModel.loadInsights();
   };
 
-  const handleGenerateInsight = (type: any, category: any) => {
+  const handleGenerateInsight = (type: string, category: string) => {
     viewModel.generateInsight(type, category);
     toast({
       title: "Insight generat",
@@ -50,11 +50,11 @@ export default function AIInsightsDashboard() {
     });
   };
 
-  const handleSetCategory = (category: any) => {
+  const handleSetCategory = (category: string) => {
     viewModel.setCategory(category);
   };
 
-  const handleSetType = (type: any) => {
+  const handleSetType = (type: string) => {
     viewModel.setType(type);
   };
 

@@ -5,21 +5,67 @@ This module provides endpoints for sending notifications and managing alerts.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Form
-from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import logging
 import os
 import requests
 
-from ..database import get_db
 from ..services.supabase_client import get_supabase_service_instance
+from pydantic import BaseModel, Field, validator, root_validator
 
 router = APIRouter(
     prefix="/api/notify",
     tags=["notifications"],
     responses={404: {"description": "Not found"}}
 )
+
+
+ALLOWED_DIGEST_FREQUENCIES = {"instant", "hourly", "daily", "weekly"}
+DEFAULT_PREFERENCES_USER = "global-admin"
+
+
+class NotificationPreferencesPayload(BaseModel):
+    """Payload model for notification preference updates."""
+
+    email: bool = Field(True, description="Primește notificări prin email")
+    sms: bool = Field(False, description="Primește notificări prin SMS")
+    whatsapp: bool = Field(True, description="Primește notificări prin WhatsApp")
+    in_app: bool = Field(True, description="Activează notificările în aplicație")
+    lead_updates: bool = Field(True, description="Alerte pentru lead-uri noi și actualizări")
+    video_updates: bool = Field(True, description="Alerte pentru generarea și publicarea videourilor")
+    financial_reports: bool = Field(True, description="Trimite rapoarte financiare")
+    social_alerts: bool = Field(True, description="Notificări pentru social media și engagement")
+    digest_frequency: str = Field(
+        "daily",
+        description="Frecvența rapoartelor consolidate (instant, hourly, daily, weekly)",
+    )
+    quiet_hours_start: Optional[str] = Field(
+        None,
+        pattern=r"^([01]\d|2[0-3]):[0-5]\d$",
+        description="Ora de start pentru quiet hours (HH:MM)",
+    )
+    quiet_hours_end: Optional[str] = Field(
+        None,
+        pattern=r"^([01]\d|2[0-3]):[0-5]\d$",
+        description="Ora de final pentru quiet hours (HH:MM)",
+    )
+
+    @validator("digest_frequency")
+    def validate_digest_frequency(cls, value: str) -> str:
+        if value not in ALLOWED_DIGEST_FREQUENCIES:
+            raise ValueError(
+                f"digest_frequency must be one of: {', '.join(sorted(ALLOWED_DIGEST_FREQUENCIES))}"
+            )
+        return value
+
+    @root_validator(skip_on_failure=True)
+    def validate_quiet_hours(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        start = values.get("quiet_hours_start")
+        end = values.get("quiet_hours_end")
+        if (start and not end) or (end and not start):
+            raise ValueError("quiet_hours_start and quiet_hours_end must be provided together")
+        return values
 
 @router.post("/test")
 async def send_test_notification(
@@ -154,7 +200,7 @@ async def get_notification_status(
         whatsapp_status = _check_whatsapp_status()
 
         # Verificăm statusul email
-        email_status = _check_email_status()
+        email_status = _check_email_status_v2()
         
         return {
             "whatsapp": whatsapp_status,
@@ -213,6 +259,34 @@ async def _send_email_message(email: str, subject: str, message: str):
     except Exception as e:
         logging.error(f"Eroare la trimiterea email-ului: {e}")
 
+
+async def _send_email_notification(email_data: Dict[str, Any]):
+    """Wrapper to send email using _send_email_message."""
+    try:
+        await _send_email_message_v2(
+            email=email_data.get("email", ""),
+            subject=email_data.get("subject", "Notificare AutoPro Daune"),
+            message=email_data.get("message", ""),
+        )
+    except Exception as e:
+        logging.error(f"Failed to send email notification: {e}")
+
+
+async def _send_email_message_v2(email: str, subject: str, message: str):
+    """New email sender using EmailService (SendGrid or SMTP)."""
+    try:
+        from ..services.email.service import EmailService, build_basic_message
+        svc = EmailService()
+        msg = build_basic_message(email, subject, message)
+        ok = await svc.send(msg)
+        if not ok:
+            raise RuntimeError("Email service failed to send message")
+    except Exception as e:
+        logging.error(f"Failed to send email via EmailService: {e}")
+
+# Backward-compat alias: route helpers call this name elsewhere
+_send_email_message = _send_email_message_v2
+
 def _check_whatsapp_status() -> Dict[str, Any]:
     """Verifică statusul serviciului WhatsApp Business."""
     try:
@@ -230,6 +304,20 @@ def _check_whatsapp_status() -> Dict[str, Any]:
         except ValueError as ve:
             return {"status": "unavailable", "reason": str(ve)}
 
+    except Exception as e:
+        return {"status": "unavailable", "reason": str(e)}
+
+def _check_email_status_v2() -> Dict[str, Any]:
+    """Status pentru serviciul de email: detecteaz�� provider �Ti validitatea configur��rii."""
+    try:
+        provider = "sendgrid" if os.getenv("SENDGRID_API_KEY") else "smtp"
+        if provider == "smtp":
+            from ..services.email.models import EmailConfig
+            cfg = EmailConfig()
+            ready = bool(cfg.smtp_username and cfg.smtp_password and cfg.from_email)
+        else:
+            ready = True
+        return {"status": "available" if ready else "misconfigured", "provider": provider}
     except Exception as e:
         return {"status": "unavailable", "reason": str(e)}
 
@@ -253,18 +341,48 @@ async def get_notifications(
 ) -> Dict[str, Any]:
     """
     Obține lista de notificări pentru user.
-    
+
     Returns:
         Listă cu notificări și count-uri
     """
+    if os.getenv("FAKE_MODE") == "true":
+        mock_notifications = [
+            {
+                "id": f"notif_{i}",
+                "type": "info" if i % 3 == 0 else "warning" if i % 3 == 1 else "success",
+                "message": f"Test notification {i}: System operation completed successfully",
+                "is_read": False if i <= 3 else True,
+                "read_at": None if i <= 3 else datetime.now().isoformat(),
+                "created_at": (datetime.now() - timedelta(hours=i)).isoformat(),
+                "metadata": {
+                    "source": "system",
+                    "priority": "normal" if i % 2 == 0 else "high"
+                }
+            }
+            for i in range(1, min(limit + 1, 21))
+        ]
+
+        # Filter unread if requested
+        if unread_only:
+            mock_notifications = [n for n in mock_notifications if not n["is_read"]]
+
+        unread_count = len([n for n in mock_notifications if not n["is_read"]])
+
+        return {
+            "success": True,
+            "notifications": mock_notifications,
+            "total": len(mock_notifications),
+            "unread_count": unread_count
+        }
+
     try:
         supabase = get_supabase_service_instance()
-        
+
         # Build filters
         filters = []
         if unread_only:
             filters.append(("eq", "is_read", False))
-        
+
         # Get notifications from system_logs table (reuse existing)
         notifications = supabase._table_select(
             "system_logs",
@@ -273,17 +391,17 @@ async def get_notifications(
             limit=limit,
             order_by=("created_at", "desc")
         ) or []
-        
+
         # Count unread
         unread_count = len([n for n in notifications if not n.get('is_read', False)])
-        
+
         return {
             "success": True,
             "notifications": notifications,
             "total": len(notifications),
             "unread_count": unread_count
         }
-        
+
     except Exception as e:
         logging.error(f"Error getting notifications: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get notifications: {str(e)}")

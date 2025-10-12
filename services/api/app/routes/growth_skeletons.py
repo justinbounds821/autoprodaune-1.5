@@ -1,7 +1,12 @@
 """
 FAZA 3 — GROWTH (minimul necesar ca să nu crape UI)
 
-Ținem SRP: nu implementăm business complex aici; doar endpointuri "sănătoase" (200 JSO
+<<<<<<< Current (Your changes)
+Ținem SRP: nu implementăm business complex aici; doar endpointuri "sănătoase" (200 JSON)
+=======
+Ținem SRP: nu implementăm business complex aici; doar endpointuri "sănătoase" (200 JSON).
+>>>>>>> Incoming (Background Agent changes)
+"""
 
 from fastapi import APIRouter
 from typing import Dict, Any

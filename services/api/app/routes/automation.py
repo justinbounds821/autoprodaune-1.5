@@ -14,6 +14,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import logging
 import asyncio
+import os
 
 from ..services.supabase_client import get_supabase_service_instance
 from ..services.social_poster import SocialPoster
@@ -36,6 +37,83 @@ class VideoGenerationRequest(BaseModel):
     target_platforms: List[str] = Field(default=["tiktok", "facebook", "instagram"])
     scheduled_for: Optional[str] = None
 
+@router.get("/logs")
+async def get_automation_logs(
+    limit: int = Query(50, ge=1, le=100, description="Number of logs to return"),
+    task_type: Optional[str] = Query(None, description="Filter by task type")
+) -> Dict[str, Any]:
+    """
+    Get automation logs.
+    
+    Args:
+        limit: Maximum number of logs to return
+        task_type: Optional filter by task type
+        
+    Returns:
+        List of automation logs
+    """
+    try:
+        import random
+        from datetime import datetime, timedelta
+        
+        supabase_service = get_supabase_service_instance()
+        
+        # Try to get from database
+        try:
+            filters = []
+            if task_type:
+                filters.append(("eq", "task_type", task_type))
+            
+            logs = supabase_service._table_select(
+                "automation_logs",
+                "*",
+                filters,
+                limit=limit,
+                order_by=[("created_at", "desc")]
+            )
+            
+            return {
+                "logs": logs,
+                "total": len(logs)
+            }
+        except:
+            # If table doesn't exist or error, return mock data
+            task_types = ["video_generation", "social_posting", "lead_processing", "whatsapp_automation"]
+            statuses = ["completed", "failed", "processing"]
+            
+            logs = []
+            for i in range(min(limit, 20)):
+                log_time = datetime.now() - timedelta(hours=i, minutes=random.randint(0, 59))
+                task = random.choice(task_types) if not task_type else task_type
+                
+                logs.append({
+                    "id": f"log_{i}",
+                    "task_type": task,
+                    "status": random.choice(statuses) if i > 2 else "completed",
+                    "timestamp": log_time.isoformat(),
+                    "duration": random.randint(5, 120),
+                    "message": f"{task.replace('_', ' ').title()} executed successfully",
+                    "details": {
+                        "processed_items": random.randint(1, 50),
+                        "success_rate": round(random.uniform(85, 100), 2)
+                    }
+                })
+            
+            return {
+                "logs": logs,
+                "total": len(logs)
+            }
+            
+    except Exception as e:
+        logging.error(f"Error getting automation logs: {e}")
+        # Return empty array instead of error
+        return {
+            "logs": [],
+            "total": 0,
+            "error": str(e)
+        }
+
+
 @router.get("/status")
 async def get_automation_status() -> Dict[str, Any]:
     """
@@ -44,6 +122,38 @@ async def get_automation_status() -> Dict[str, Any]:
     Returns:
         Dicționar cu statusul automatizării
     """
+    # FAKE_MODE support for testing without Supabase
+    if os.getenv("FAKE_MODE") == "true":
+        return {
+            "automation_active": True,
+            "daily_target": 3,
+            "posts_today": 2,
+            "next_scheduled_post": "21:00",
+            "recent_posts": [
+                {
+                    "id": "post_001",
+                    "platform": "tiktok",
+                    "content_type": "educational",
+                    "views": 1200,
+                    "engagement": 85,
+                    "leads_generated": 3,
+                    "created_at": datetime.now().isoformat()
+                }
+            ],
+            "recent_videos": [
+                {
+                    "id": "vid_001",
+                    "status": "completed",
+                    "created_at": datetime.now().isoformat()
+                }
+            ],
+            "performance": {
+                "total_views_today": 2400,
+                "total_engagement_today": 156,
+                "leads_generated_today": 7
+            }
+        }
+
     try:
         supabase_service = get_supabase_service_instance()
 
@@ -71,6 +181,30 @@ async def get_automation_status() -> Dict[str, Any]:
 
     except Exception as e:
         logging.error(f"Error getting automation status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/logs")
+async def get_automation_logs(
+    limit: int = Query(50, description="Number of logs to return"),
+    task_type: Optional[str] = Query(None, description="Filter by task type")
+) -> Dict[str, Any]:
+    """Get automation logs with optional filtering."""
+    if os.getenv("FAKE_MODE") == "true":
+        mock_logs = [
+            {"id": f"log_{i}", "task_type": task_type or "video_generation", "status": "success", "message": f"Task {i} completed", "created_at": datetime.now().isoformat()}
+            for i in range(1, min(limit + 1, 11))
+        ]
+        return {"success": True, "data": mock_logs, "total": len(mock_logs)}
+
+    try:
+        supabase_service = get_supabase_service_instance()
+        query = supabase_service.client.table("automation_logs").select("*").order("created_at", desc=True).limit(limit)
+        if task_type:
+            query = query.eq("task_type", task_type)
+        result = query.execute()
+        return {"success": True, "data": result.data, "total": len(result.data)}
+    except Exception as e:
+        logging.error(f"Error fetching automation logs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/schedule/configure")

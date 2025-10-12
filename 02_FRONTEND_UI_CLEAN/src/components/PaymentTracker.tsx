@@ -168,7 +168,7 @@ export default function PaymentTracker() {
 
       const response = await AutoProApiService.createPayment(paymentData);
 
-      if (response.payment || response.id || response.success) {
+      if (response.payment || response.id || response.message) {
         toast({
           title: "Plată creată",
           description: "Plata a fost înregistrată cu succes.",
@@ -205,7 +205,7 @@ export default function PaymentTracker() {
     try {
       const response = await AutoProApiService.updatePayment(paymentId, updates);
 
-      if (response.success || response.payment || response.updated || response.message) {
+      if (response.payment || response.updated || response.message) {
         toast({
           title: "Plată actualizată",
           description: "Plata a fost actualizată cu succes.",
@@ -229,7 +229,7 @@ export default function PaymentTracker() {
     try {
       const response = await AutoProApiService.deletePayment(paymentId);
 
-      if (response.success || response.deleted || response.message) {
+      if (response.deleted || response.message) {
         toast({
           title: "Plată ștearsă",
           description: "Plata a fost ștearsă cu succes.",

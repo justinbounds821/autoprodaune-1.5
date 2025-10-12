@@ -76,9 +76,7 @@ class VideoGenerator:
     def call_pika_api(self, prompt: str) -> str:
         """Call Pika API to generate video."""
         if not self.api_key:
-            # Pentru MVP, returnăm un URL mock
-            print("[VideoGenerator] VEO_API_KEY not configured, using mock video")
-            return "https://example.com/mock-video.mp4"
+            raise ValueError("PIKA_API_KEY not configured. Please set VEO_API_KEY in .env")
             
         # Pika API implementation
         url = "https://api.pika.art/v1/generate/video"
@@ -97,26 +95,28 @@ class VideoGenerator:
         }
         
         try:
+            logger.info(f"[Pika] Submitting video generation request...")
             response = requests.post(url, json=payload, headers=headers, timeout=60)
             response.raise_for_status()
             result = response.json()
             
             # Pika returnează un job ID, trebuie să așteptăm finalizarea
             job_id = result.get("id")
-            if job_id:
-                # În producție, ar trebui să polling pentru status
-                # Pentru acum, returnăm mock
-                return "https://example.com/mock-video.mp4"
+            if not job_id:
+                raise ValueError(f"Pika API did not return job ID: {result}")
+            
+            logger.info(f"[Pika] Job created: {job_id}, starting polling...")
+            # Poll pentru status
+            return self._poll_pika_status(job_id)
                 
         except Exception as e:
-            print(f"[VideoGenerator] Pika API error: {e}")
-            return "https://example.com/mock-video.mp4"
+            logger.error(f"[VideoGenerator] Pika API error: {e}")
+            raise
     
     def call_heygen_api(self, prompt: str) -> str:
         """Call HeyGen API to generate video."""
         if not self.api_key:
-            print("[VideoGenerator] VEO_API_KEY not configured, using mock video")
-            return "https://example.com/mock-video.mp4"
+            raise ValueError("HEYGEN_API_KEY not configured. Please set HEYGEN_API_KEY in .env")
             
         # HeyGen API implementation
         url = "https://api.heygen.com/v2/video/generate"
@@ -134,7 +134,7 @@ class VideoGenerator:
                 "voice": {
                     "type": "text",
                     "input_text": prompt,
-                    "voice_id": "en-US-JennyNeural",  # Sau română dacă disponibil
+                    "voice_id": "en-US-JennyNeural",
                     "speed": 1.0
                 },
                 "background": {
@@ -151,20 +151,127 @@ class VideoGenerator:
         }
         
         try:
+            logger.info(f"[HeyGen] Submitting video generation request...")
             response = requests.post(url, json=payload, headers=headers, timeout=60)
             response.raise_for_status()
             result = response.json()
             
             # HeyGen returnează video_id, trebuie să verificăm statusul
             video_id = result.get("data", {}).get("video_id")
-            if video_id:
-                # În producție, ar trebui să verificăm statusul
-                # Pentru acum, returnăm mock
-                return "https://example.com/mock-video.mp4"
+            if not video_id:
+                raise ValueError(f"HeyGen API did not return video_id: {result}")
+            
+            logger.info(f"[HeyGen] Video created: {video_id}, starting polling...")
+            # Poll pentru status
+            return self._poll_heygen_status(video_id)
                 
         except Exception as e:
-            print(f"[VideoGenerator] HeyGen API error: {e}")
-            return "https://example.com/mock-video.mp4"
+            logger.error(f"[VideoGenerator] HeyGen API error: {e}")
+            raise
+    
+    def _poll_pika_status(self, job_id: str, max_attempts: int = 60) -> str:
+        """
+        Poll Pika API for job completion.
+        
+        Args:
+            job_id: Pika job ID
+            max_attempts: Maximum polling attempts (default 60 = 5 minutes)
+            
+        Returns:
+            Video URL when ready
+        """
+        url = f"https://api.pika.art/v1/video/{job_id}"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        
+        for attempt in range(max_attempts):
+            try:
+                logger.info(f"[Pika] Polling attempt {attempt + 1}/{max_attempts}...")
+                response = requests.get(url, headers=headers, timeout=30)
+                response.raise_for_status()
+                result = response.json()
+                
+                status = result.get("status")
+                logger.info(f"[Pika] Status: {status}")
+                
+                if status == "succeeded":
+                    video_url = result.get("video_url")
+                    if video_url:
+                        logger.info(f"[Pika] Video ready: {video_url}")
+                        return video_url
+                    else:
+                        raise ValueError(f"Pika job succeeded but no video_url: {result}")
+                        
+                elif status == "failed":
+                    error_msg = result.get("error", "Unknown error")
+                    raise ValueError(f"Pika generation failed: {error_msg}")
+                    
+                elif status in ["pending", "processing"]:
+                    # Continue polling
+                    time.sleep(5)  # Wait 5 seconds before next poll
+                    continue
+                else:
+                    logger.warning(f"[Pika] Unknown status: {status}")
+                    time.sleep(5)
+                    
+            except requests.exceptions.RequestException as e:
+                logger.error(f"[Pika] Polling error: {e}")
+                if attempt == max_attempts - 1:
+                    raise
+                time.sleep(5)
+        
+        raise TimeoutError(f"Pika video generation timeout after {max_attempts * 5} seconds")
+    
+    def _poll_heygen_status(self, video_id: str, max_attempts: int = 120) -> str:
+        """
+        Poll HeyGen API for video completion.
+        
+        Args:
+            video_id: HeyGen video ID
+            max_attempts: Maximum polling attempts (default 120 = 10 minutes)
+            
+        Returns:
+            Video URL when ready
+        """
+        url = f"https://api.heygen.com/v1/video_status.get?video_id={video_id}"
+        headers = {"X-Api-Key": self.api_key}
+        
+        for attempt in range(max_attempts):
+            try:
+                logger.info(f"[HeyGen] Polling attempt {attempt + 1}/{max_attempts}...")
+                response = requests.get(url, headers=headers, timeout=30)
+                response.raise_for_status()
+                result = response.json()
+                
+                status = result.get("data", {}).get("status")
+                logger.info(f"[HeyGen] Status: {status}")
+                
+                if status == "completed":
+                    video_url = result.get("data", {}).get("video_url")
+                    if video_url:
+                        logger.info(f"[HeyGen] Video ready: {video_url}")
+                        return video_url
+                    else:
+                        raise ValueError(f"HeyGen completed but no video_url: {result}")
+                        
+                elif status == "failed":
+                    error_msg = result.get("data", {}).get("error", "Unknown error")
+                    raise ValueError(f"HeyGen generation failed: {error_msg}")
+                    
+                elif status in ["pending", "processing"]:
+                    # Continue polling
+                    time.sleep(5)  # Wait 5 seconds before next poll
+                    continue
+                else:
+                    logger.warning(f"[HeyGen] Unknown status: {status}")
+                    time.sleep(5)
+                    
+            except requests.exceptions.RequestException as e:
+                logger.error(f"[HeyGen] Polling error: {e}")
+                if attempt == max_attempts - 1:
+                    raise
+                time.sleep(5)
+        
+        raise TimeoutError(f"HeyGen video generation timeout after {max_attempts * 5} seconds")
     
     def download_video(self, url: str, filename: str) -> str:
         """Download video from URL and save to output directory."""

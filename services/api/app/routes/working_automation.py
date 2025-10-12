@@ -9,6 +9,9 @@ from typing import Dict, Any, List
 from datetime import datetime
 import logging
 import os
+from ..core.monitoring import get_monitoring
+
+from ..core.monitoring import AUTOMATION_STATUS, DAILY_POSTS_COMPLETED
 
 router = APIRouter(
     prefix="/api/working-automation",
@@ -64,6 +67,9 @@ async def toggle_automation(request: AutomationToggleRequest):
     try:
         old_status = automation_state["active"]
         automation_state["active"] = request.active
+        
+        # Update Prometheus gauge
+        AUTOMATION_STATUS.set(1.0 if request.active else 0.0)
 
         action = {
             "action": f"Automation {'activated' if request.active else 'deactivated'}",
@@ -73,6 +79,12 @@ async def toggle_automation(request: AutomationToggleRequest):
         }
 
         automation_state["recent_actions"].append(action)
+
+        # Update monitoring gauge for automation status
+        try:
+            get_monitoring().update_automation_status(request.active)
+        except Exception:
+            pass
 
         # Keep only last 10 actions
         if len(automation_state["recent_actions"]) > 10:
@@ -156,6 +168,15 @@ async def trigger_manual_post():
         # Simulate post creation
         automation_state["posts_today"] += 1
         automation_state["last_post_time"] = datetime.now().isoformat()
+        
+        # Update Prometheus gauge
+        DAILY_POSTS_COMPLETED.inc()
+
+        # Reflect posts_today to Prometheus gauge
+        try:
+            get_monitoring().update_daily_posts_count(automation_state["posts_today"])
+        except Exception:
+            pass
 
         action = {
             "action": "Manual post triggered",

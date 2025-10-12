@@ -1,7 +1,0 @@
-POST http://127.0.0.1:8001/api/video/video/heygen/generate
-Content-Type: multipart/form-data
-
-script: Test script for debugging
-quality: high
-style: realistic
-avatar: default

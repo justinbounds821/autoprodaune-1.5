@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Play, Download, Trash2, Plus, RefreshCw, Video, User, Palette, Monitor, Sparkles } from 'lucide-react';
+import { Play, Download, Trash2, Plus, RotateCcw, Video, User, Palette, Monitor, Sparkles } from 'lucide-react';
 import AutoProApiService from '@/services/autoproApi';
 import { useToast } from '@/hooks/use-toast';
 import HeyGenKeyMissingBanner from '@/components/HeyGenKeyMissingBanner';
@@ -26,6 +26,9 @@ interface ProfessionalVideo {
   avatar_type: string;
   background_type: string;
   aspect_ratio: string;
+  duration_seconds?: number;
+  file_size_mb?: number;
+  cost?: number;
   metrics?: {
     views: number;
     likes: number;
@@ -65,6 +68,9 @@ const VideoManagement: React.FC = () => {
   // Video preview modal state
   const [previewVideo, setPreviewVideo] = useState<ProfessionalVideo | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  
+  // Generated video preview state for same-page display
+  const [generatedVideoPreview, setGeneratedVideoPreview] = useState<ProfessionalVideo | null>(null);
 
   // HeyGen video generation states
   const [heygenScript, setHeygenScript] = useState('Bună ziua! Sunt avocat AutoPro Daune. Vă ajut să obțineți despăgubiri complete pentru daunele auto. Apelați acum!');
@@ -76,6 +82,12 @@ const VideoManagement: React.FC = () => {
   const [heygenProgress, setHeygenProgress] = useState<string>('');
   const [heygenAvatars, setHeygenAvatars] = useState<any[]>([]);
   const [heygenKeyAvailable, setHeygenKeyAvailable] = useState<boolean>(true);
+
+  // Internal avatar humanize (no HeyGen)
+  const [avatarScript, setAvatarScript] = useState<string>('Bună! Sunt avatarul tău personalizat. Vă explic pe scurt cum te ajută AutoPro Daune.');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarGenerating, setAvatarGenerating] = useState<boolean>(false);
+  const [avatarProgress, setAvatarProgress] = useState<string>('');
 
   // Batch delete state
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
@@ -121,7 +133,7 @@ const VideoManagement: React.FC = () => {
       } else {
         // Fallback to older API if advanced not available
         const fallbackResponse = await AutoProApiService.getVideos();
-        if (fallbackResponse.success && fallbackResponse.data) {
+        if (fallbackResponse.data || Array.isArray(fallbackResponse)) {
           setVideos(fallbackResponse.data.map((v: any) => ({
             ...v,
             avatar_type: v.avatar_type || 'professional',
@@ -281,47 +293,142 @@ const VideoManagement: React.FC = () => {
     }
   };
 
+  const handleGenerateDailySummary = async () => {
+    try {
+      setGenerating(true);
+      
+      const response = await fetch('/api/video/generate-daily-summary', {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.success) {
+          toast({
+            title: "✅ Sumar zilnic generat!",
+            description: `Video cu statisticile zilei generat cu succes (${data.duration_seconds}s)`,
+          });
+          
+          const previewVideo: ProfessionalVideo = {
+            id: data.video_id || Date.now().toString(),
+            title: 'Sumar Zilnic - ' + new Date().toLocaleDateString(),
+            status: 'completed',
+            url: data.video_path ? `/videos/${data.video_path.split('/').pop()}` : undefined,
+            createdAt: new Date().toISOString(),
+            provider: data.provider || 'Internal - Daily Summary',
+            avatar_type: 'Daily Report',
+            background_type: 'gradient',
+            aspect_ratio: '16:9',
+            duration_seconds: data.duration_seconds,
+            file_size_mb: data.file_size_mb,
+            cost: 0.0
+          };
+          
+          setGeneratedVideoPreview(previewVideo);
+          
+          setTimeout(() => {
+            loadVideos();
+          }, 1000);
+        } else {
+          throw new Error(data.error || 'Failed to generate daily summary');
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Network error');
+      }
+    } catch (error) {
+      console.error('Failed to generate daily summary:', error);
+      toast({
+        title: "Eroare generare sumar",
+        description: "Nu s-a putut genera sumarul zilnic. Verifică conexiunea.",
+        variant: "destructive",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const handleGenerateVideo = async () => {
     if (!prompt.trim()) return;
 
     try {
       setGenerating(true);
 
-      // Use advanced professional video generation API
-      const requestBody = {
-        script: prompt,
-        avatar_type: selectedAvatar,
-        background_type: selectedBackground,
-        aspect_ratio: aspectRatio,
-        resolution: resolution
+      // Determină voice_style bazat pe selectedAvatar
+      const voiceStyleMap: Record<string, string> = {
+        'Professional Man': 'professional',
+        'Professional Woman': 'professional',
+        'Friendly Guide': 'empathetic',
+        'Expert Consultant': 'confident',
+        'Manole Avatar': 'manole'
       };
+      
+      const voiceStyle = voiceStyleMap[selectedAvatar] || 'professional';
+      
+      // Determină background_type
+      const backgroundMap: Record<string, string> = {
+        'Modern Office': 'gradient',
+        'Clean Studio': 'solid',
+        'Corporate Blue': 'gradient',
+        'Elegant Gray': 'solid'
+      };
+      
+      const backgroundType = backgroundMap[selectedBackground] || 'gradient';
 
-      const response = await fetch('/api/advanced-video/generate', {
+      // Folosește serviciul nostru INTERN - ZERO COSTURI!
+      const formData = new FormData();
+      // Backend expects 'script' instead of 'text' for internal generator
+      formData.append('script', prompt);
+      formData.append('voice_style', voiceStyle);
+      formData.append('background_type', backgroundType);
+      formData.append('aspect_ratio', aspectRatio);
+      formData.append('resolution', resolution);
+
+      const response = await fetch('/api/video/internal-generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
+        body: formData
       });
 
       if (response.ok) {
         const data = await response.json();
-        if (data.status === "queued" || data.job_id) {
-          // Video generation queued successfully
+        
+        if (data.success) {
+          // Video generat cu succes prin serviciul intern!
           toast({
-            title: "🎬 Video generat cu succes!",
-            description: `Job ID: ${data.job_id}. Estimare: ${data.estimated_time || "10-15 minute"}`,
+            title: "✅ Video generat cu succes - ZERO COST!",
+            description: `Durata: ${data.duration_seconds}s | Mărime: ${data.file_size_mb}MB | Provider: Internal (ElevenLabs + FFmpeg)`,
           });
 
-          // Reload videos to get updated list after a short delay
+          // Creează preview video pentru afișare imediată
+          const previewVideo: ProfessionalVideo = {
+            id: data.video_id || Date.now().toString(),
+            title: prompt.substring(0, 50) + '...',
+            status: 'completed',
+            url: data.video_path ? `/videos/${data.video_path.split('/').pop()}` : undefined,
+            preview_base64: data.preview_base64,
+            createdAt: new Date().toISOString(),
+            provider: data.provider || 'Internal Video Service',
+            avatar_type: selectedAvatar,
+            background_type: selectedBackground,
+            aspect_ratio: data.aspect_ratio || aspectRatio,
+            duration_seconds: data.duration_seconds,
+            file_size_mb: data.file_size_mb,
+            cost: 0.0
+          };
+          
+          setGeneratedVideoPreview(previewVideo);
+
+          // Reload videos pentru a actualiza lista
           setTimeout(() => {
             loadVideos();
-          }, 2000);
+          }, 1000);
         } else {
-          throw new Error(data.message || 'Failed to generate video');
+          throw new Error(data.error || data.message || 'Failed to generate video');
         }
       } else {
-        throw new Error('Network error');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Network error');
       }
     } catch (error) {
       console.error('Failed to generate video:', error);
@@ -349,7 +456,7 @@ const VideoManagement: React.FC = () => {
       // Use the new autoproApi method
       const response = await AutoProApiService.deleteVideoJob(id);
 
-      if (response.success || response.deleted || response.message) {
+      if (response.deleted || response.message) {
         setVideos(prev => prev.filter(v => v.id !== id));
         toast({
           title: "✅ Video șters",
@@ -508,6 +615,67 @@ const VideoManagement: React.FC = () => {
     }
   };
 
+  // Internal humanize using our backend (not HeyGen)
+  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Eroare', description: 'Te rugăm selectează o imagine (JPG/PNG/WEBP).', variant: 'destructive' });
+      return;
+    }
+    setAvatarFile(file);
+  };
+
+  const handleGenerateInternalAvatar = async () => {
+    if (!avatarScript.trim()) {
+      toast({ title: 'Eroare', description: 'Completează textul (script).', variant: 'destructive' });
+      return;
+    }
+    if (!avatarFile) {
+      toast({ title: 'Eroare', description: 'Selectează un fișier imagine pentru avatar.', variant: 'destructive' });
+      return;
+    }
+    try {
+      setAvatarGenerating(true);
+      setAvatarProgress('Se încarcă avatarul...');
+      const formData = new FormData();
+      formData.append('prompt', avatarScript);
+      formData.append('manole_photo', avatarFile); // backend endpoint accepts a generic photo param name
+      formData.append('display_mode', 'sequence');
+      formData.append('voice_emotion', 'professional');
+
+      const resp = await fetch('/api/video/manole/generate', { method: 'POST', body: formData });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || 'Eroare la generarea video-ului');
+      }
+      const data = await resp.json();
+      toast({ title: 'Video generat', description: data.message || 'Avatarul a fost umanizat cu succes!' });
+      // Show preview card
+      const preview: ProfessionalVideo = {
+        id: data.video_id || Date.now().toString(),
+        title: 'Avatar Humanizat',
+        status: 'completed',
+        url: data.video_url || (data.video_path ? `/videos/${String(data.video_path).split('/').pop()}` : undefined),
+        createdAt: new Date().toISOString(),
+        provider: data.provider || 'AutoPro Internal',
+        avatar_type: 'Custom Avatar',
+        background_type: 'gradient',
+        aspect_ratio: '16:9',
+        duration_seconds: data.duration_seconds,
+        file_size_mb: data.file_size_mb,
+        cost: 0,
+      };
+      setGeneratedVideoPreview(preview);
+      setTimeout(() => loadVideos(), 800);
+    } catch (e: any) {
+      toast({ title: 'Eroare', description: e.message || 'Generarea a eșuat', variant: 'destructive' });
+    } finally {
+      setAvatarGenerating(false);
+      setAvatarProgress('');
+    }
+  };
+
   const pollHeyGenStatus = async (videoId: string) => {
     const maxAttempts = 60; // 10 minutes (60 x 10s)
     let attempts = 0;
@@ -643,7 +811,7 @@ const VideoManagement: React.FC = () => {
               >
                 {isDeletingBatch ? (
                   <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    <RotateCcw className="w-4 h-4 mr-2 animate-spin" />
                     Deleting...
                   </>
                 ) : (
@@ -656,11 +824,47 @@ const VideoManagement: React.FC = () => {
             </>
           )}
           <Button onClick={loadVideos} variant="outline" disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            <RotateCcw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
       </div>
+
+      {/* Avatar Humanize (backend intern, fără HeyGen) */}
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <User className="w-5 h-5" />
+            Avatar Humanize (backend intern)
+          </CardTitle>
+          <p className="text-sm text-gray-500">
+            Încarcă o poză de tip portret și generează un video cu voce sintetizată folosind doar backend-ul nostru (fără HeyGen).
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Script (text)</Label>
+            <Textarea
+              value={avatarScript}
+              onChange={(e) => setAvatarScript(e.target.value)}
+              rows={4}
+              placeholder="Scrie ce vrei să spună avatarul"
+              disabled={avatarGenerating}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Imagine Avatar</Label>
+            <Input type="file" accept="image/*" onChange={handleAvatarFileChange} disabled={avatarGenerating} />
+            {avatarFile && <p className="text-xs text-green-600">Selectat: {avatarFile.name}</p>}
+          </div>
+          <div className="flex items-center gap-3">
+            <Button onClick={handleGenerateInternalAvatar} disabled={avatarGenerating}>
+              {avatarGenerating ? 'Se generează...' : 'Generează video'}
+            </Button>
+            {avatarProgress && <span className="text-sm text-gray-500">{avatarProgress}</span>}
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="list" className="w-full">
         <TabsList>
@@ -731,7 +935,7 @@ const VideoManagement: React.FC = () => {
                           </div>
                         ) : video.status === 'generating' ? (
                           <div className="flex flex-col items-center">
-                            <RefreshCw className="w-8 h-8 animate-spin text-blue-500 mb-2" />
+                            <RotateCcw className="w-8 h-8 animate-spin text-blue-500 mb-2" />
                             <p className="text-sm text-gray-500">Se generează...</p>
                           </div>
                         ) : video.status === 'failed' ? (
@@ -905,7 +1109,7 @@ const VideoManagement: React.FC = () => {
                   >
                     {heygenGenerating ? (
                       <>
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        <RotateCcw className="w-4 h-4 mr-2 animate-spin" />
                         Generare în curs...
                       </>
                     ) : (
@@ -919,7 +1123,7 @@ const VideoManagement: React.FC = () => {
                   {heygenProgress && (
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                       <div className="flex items-center gap-2 mb-2">
-                        <RefreshCw className="w-4 h-4 text-purple-600 animate-spin" />
+                        <RotateCcw className="w-4 h-4 text-purple-600 animate-spin" />
                         <p className="text-sm font-medium text-purple-900">{heygenProgress}</p>
                       </div>
                       <p className="text-xs text-purple-700">
@@ -1070,15 +1274,38 @@ const VideoManagement: React.FC = () => {
                   </div>
                 </div>
 
-                <Button
-                  onClick={handleGenerateVideo}
-                  disabled={!prompt.trim() || generating}
-                  className="w-full"
-                  size="lg"
-                >
-                  <Video className="w-4 h-4 mr-2" />
-                  {generating ? 'Se generează video profesional...' : 'Generează Video AI Profesional'}
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    onClick={handleGenerateVideo}
+                    disabled={!prompt.trim() || generating}
+                    className="w-full"
+                    size="lg"
+                  >
+                    <Video className="w-4 h-4 mr-2" />
+                    {generating ? 'Se generează video profesional...' : 'Generează Video AI Profesional'}
+                  </Button>
+                  
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleGenerateDailySummary}
+                      disabled={generating}
+                      variant="outline"
+                      className="flex-1"
+                      size="sm"
+                    >
+                      📊 Sumar Zilnic
+                    </Button>
+                    <Button
+                      onClick={() => alert('Selectează un lead din lista de lead-uri pentru a genera video')}
+                      disabled={generating}
+                      variant="outline"
+                      className="flex-1"
+                      size="sm"
+                    >
+                      🎯 Din Lead
+                    </Button>
+                  </div>
+                </div>
 
                 {generating && (
                   <div className="text-center py-4">
@@ -1103,13 +1330,69 @@ const VideoManagement: React.FC = () => {
               <CardContent>
                 <div className="space-y-4">
                   <div className="bg-gray-100 rounded-lg p-4 aspect-video flex items-center justify-center">
-                    <div className="text-center">
-                      <Video className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-500">Preview video va apărea aici</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {aspectRatio} @ {resolution}
-                      </p>
-                    </div>
+                    {generatedVideoPreview ? (
+                      <div className="w-full h-full">
+                        {generatedVideoPreview.preview_base64 ? (
+                          <img
+                            src={`data:image/png;base64,${generatedVideoPreview.preview_base64}`}
+                            alt={generatedVideoPreview.title}
+                            className="w-full h-full object-cover rounded-lg"
+                          />
+                        ) : generatedVideoPreview.url ? (
+                          <video
+                            src={generatedVideoPreview.url}
+                            className="w-full h-full object-cover rounded-lg"
+                            controls
+                            autoPlay
+                            loop
+                            playsInline
+                          >
+                            <source src={generatedVideoPreview.url} type="video/mp4" />
+                            Browser-ul tău nu suportă video HTML5.
+                          </video>
+                        ) : (
+                          <div className="text-center">
+                            <Video className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500">Video generat - se încarcă...</p>
+                          </div>
+                        )}
+                        <div className="mt-2 text-center">
+                          <p className="text-xs text-green-600 font-medium">✅ Video generat cu succes!</p>
+                          <p className="text-xs text-gray-400">
+                            {generatedVideoPreview.aspect_ratio} @ {resolution}
+                          </p>
+                          <div className="flex gap-2 justify-center mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setPreviewVideo(generatedVideoPreview);
+                                setShowPreviewModal(true);
+                              }}
+                            >
+                              <Play className="w-3 h-3 mr-1" />
+                              Preview
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDownloadVideo(generatedVideoPreview)}
+                            >
+                              <Download className="w-3 h-3 mr-1" />
+                              Download
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <Video className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">Preview video va apărea aici</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {aspectRatio} @ {resolution}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">

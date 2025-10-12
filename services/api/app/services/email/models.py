@@ -88,12 +88,16 @@ class EmailConfig:
     """Configurația pentru email"""
     
     def __init__(self):
-        self.smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        # Support both SMTP_SERVER and legacy SMTP_HOST
+        self.smtp_server = os.getenv("SMTP_SERVER") or os.getenv("SMTP_HOST", "smtp.gmail.com")
         self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.smtp_username = os.getenv("SMTP_USERNAME")
-        self.smtp_password = os.getenv("SMTP_PASSWORD")
+        # Support both SMTP_USERNAME and legacy SMTP_USER
+        self.smtp_username = os.getenv("SMTP_USERNAME") or os.getenv("SMTP_USER")
+        # Support both SMTP_PASSWORD and legacy SMTP_PASS
+        self.smtp_password = os.getenv("SMTP_PASSWORD") or os.getenv("SMTP_PASS")
         self.use_tls = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
-        self.from_email = os.getenv("FROM_EMAIL", self.smtp_username)
+        # Support FROM_EMAIL or legacy SMTP_FROM
+        self.from_email = os.getenv("FROM_EMAIL") or os.getenv("SMTP_FROM", self.smtp_username)
         self.from_name = os.getenv("FROM_NAME", "AutoPro Daune")
         
         # Configurații pentru rate limiting

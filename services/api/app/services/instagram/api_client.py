@@ -27,7 +27,16 @@ class InstagramAPIClient:
         return self.oauth_manager.is_token_valid(SocialPlatform.INSTAGRAM)
 
     def get_access_token(self) -> Optional[str]:
-        return self.oauth_manager.get_valid_access_token(SocialPlatform.INSTAGRAM)
+        token = self.oauth_manager.get_valid_access_token(SocialPlatform.INSTAGRAM)
+        if token:
+            return token
+        try:
+            from ..supabase_client import get_supabase_service_instance  # type: ignore
+            sb = get_supabase_service_instance()
+            rows = sb._table_select("social_tokens", "*", filters=[("eq", "platform", "instagram")], order_by=("updated_at", "desc")) or []
+            return rows[0].get("access_token") if rows else None
+        except Exception:
+            return None
 
     def headers_json(self, access_token: str) -> Dict[str, str]:
         return {

@@ -134,9 +134,9 @@ const LeadManagement: React.FC = () => {
         }
 
         // Calculate KPIs from leads data
-        const totalLeads = mappedLeads.length;
-        const newLeads = mappedLeads.filter(lead => lead.status === 'new').length;
-        const completedCases = mappedLeads.filter(lead => lead.status === 'completed').length;
+        const totalLeads = mappedLeads ? mappedLeads.length : 0;
+        const newLeads = mappedLeads ? mappedLeads.filter(lead => lead.status === 'new').length : 0;
+        const completedCases = mappedLeads ? mappedLeads.filter(lead => lead.status === 'completed').length : 0;
         const conversionRate = totalLeads > 0 ? (completedCases / totalLeads) * 100 : 0;
 
         setKpis({
@@ -226,7 +226,7 @@ const LeadManagement: React.FC = () => {
     }
   };
 
-  const filteredLeads = leads.filter(lead => {
+  const filteredLeads = (leads || []).filter(lead => {
     const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          lead.phone.includes(searchTerm) ||
                          lead.details.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -356,7 +356,7 @@ const LeadManagement: React.FC = () => {
   };
 
   const selectAllLeads = () => {
-    const allIds = new Set(filteredLeads.map(l => l.id));
+    const allIds = new Set((filteredLeads || []).map(l => l.id));
     setSelectedLeads(allIds);
   };
 
@@ -502,7 +502,7 @@ const LeadManagement: React.FC = () => {
 
   const exportLeadsOld = () => {
     // OLD: Simple CSV export functionality (kept as backup)
-    const csvData = filteredLeads.map(lead => ({
+    const csvData = (filteredLeads || []).map(lead => ({
       'Nume': lead.name,
       'Telefon': lead.phone,
       'Email': lead.email || '',
@@ -588,7 +588,7 @@ const LeadManagement: React.FC = () => {
           <Button 
             variant="outline" 
             onClick={scoreAllLeads}
-            disabled={scoringAllLeads || leads.length === 0}
+            disabled={scoringAllLeads || !leads || leads.length === 0}
           >
             {scoringAllLeads ? (
               <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
@@ -742,7 +742,7 @@ const LeadManagement: React.FC = () => {
       {/* Leads Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Lead-uri ({filteredLeads.length})</CardTitle>
+          <CardTitle>Lead-uri ({filteredLeads ? filteredLeads.length : 0})</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -779,7 +779,7 @@ const LeadManagement: React.FC = () => {
                         )}
                         <div className="flex items-center gap-1">
                           <FileText className="w-3 h-3" />
-                          <span>{lead.files.length} fișiere</span>
+                          <span>{lead.files ? lead.files.length : 0} fișiere</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
@@ -860,7 +860,7 @@ const LeadManagement: React.FC = () => {
             })}
           </div>
 
-          {filteredLeads.length === 0 && (
+          {(!filteredLeads || filteredLeads.length === 0) && (
             <div className="text-center py-8 text-muted-foreground">
               Nu s-au găsit lead-uri cu criteriile specificate.
             </div>
@@ -920,9 +920,9 @@ const LeadManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-sm font-medium">Fișiere ({selectedLead.files.length})</label>
+                <label className="text-sm font-medium">Fișiere ({selectedLead.files ? selectedLead.files.length : 0})</label>
                 <div className="text-sm text-muted-foreground">
-                  {selectedLead.files.length > 0 ? selectedLead.files.join(', ') : 'Niciun fișier atașat'}
+                  {(selectedLead.files && selectedLead.files.length > 0) ? selectedLead.files.join(', ') : 'Niciun fișier atașat'}
                 </div>
               </div>
 
@@ -1001,7 +1001,7 @@ const LeadManagement: React.FC = () => {
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
                 <p className="text-sm text-muted-foreground">Loading timeline...</p>
               </div>
-            ) : activities.length === 0 ? (
+            ) : (!activities || activities.length === 0) ? (
               <div className="text-center py-8 text-muted-foreground">
                 <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
                 <p>No activities yet</p>

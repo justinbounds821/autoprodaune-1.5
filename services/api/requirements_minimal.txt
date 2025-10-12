@@ -14,7 +14,7 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
 
 # HTTP Client
-httpx==0.25.0
+httpx>=0.24.0,<0.25.0
 
 # File Handling
 python-dotenv==1.0.0

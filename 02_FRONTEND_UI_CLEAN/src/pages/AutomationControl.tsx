@@ -75,7 +75,7 @@ const AutomationControl: React.FC = () => {
         response = await AutoProApiService.stopAutomation();
       }
 
-      if (response.success || response.status === "started" || response.status === "stopped" || response.automation_active !== undefined) {
+      if (response.status === "started" || response.status === "stopped" || response.automation_active !== undefined) {
         await loadStatus();
         toast({
           title: enabled ? "Automation pornit" : "Automation oprit",
@@ -101,7 +101,7 @@ const AutomationControl: React.FC = () => {
       setActionLoading(true);
       const response = await AutoProApiService.triggerAutomation();
 
-      if (response.success || response.triggered || response.status === "triggered" || response.message) {
+      if (response.triggered || response.status === "triggered" || response.message) {
         await loadStatus();
         await loadLogs();
         toast({

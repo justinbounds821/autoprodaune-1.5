@@ -56,7 +56,7 @@ export async function getMetrics() {
 // Get leads
 export async function getLeads() {
   try {
-    const response = await api.get("/api/leads/");
+    const response = await api.get("/leads/");
     return response.data;
   } catch (error) {
     console.error('Get leads failed:', error);
@@ -65,9 +65,16 @@ export async function getLeads() {
 }
 
 // Create lead
-export async function createLead(leadData: any) {
+export async function createLead(leadData: {
+  name: string;
+  phone: string;
+  email?: string;
+  location?: string;
+  damageType?: string;
+  details: string;
+}) {
   try {
-    const response = await api.post("/api/leads/", leadData);
+    const response = await api.post("/leads/", leadData);
     return response.data;
   } catch (error) {
     console.error('Create lead failed:', error);
@@ -78,7 +85,7 @@ export async function createLead(leadData: any) {
 // Update lead status
 export async function updateLeadStatus(leadId: string, status: string) {
   try {
-    const response = await api.put(`/api/leads/${leadId}`, { status });
+    const response = await api.put(`/leads/${leadId}`, { status });
     return response.data;
   } catch (error) {
     console.error('Update lead status failed:', error);
@@ -89,7 +96,7 @@ export async function updateLeadStatus(leadId: string, status: string) {
 // Get financial dashboard
 export async function getFinancialDashboard() {
   try {
-    const response = await api.get("/api/financial/dashboard");
+    const response = await api.get("/financial/dashboard");
     return response.data;
   } catch (error) {
     console.error('Get financial dashboard failed:', error);
@@ -100,7 +107,7 @@ export async function getFinancialDashboard() {
 // Get social media summary
 export async function getSocialSummary() {
   try {
-    const response = await api.get("/api/social/summary");
+    const response = await api.get("/social/summary");
     return response.data;
   } catch (error) {
     console.error('Get social summary failed:', error);
@@ -111,10 +118,148 @@ export async function getSocialSummary() {
 // Get video stats
 export async function getVideoStats() {
   try {
-    const response = await api.get("/api/video/stats");
+    const response = await api.get("/video/stats");
     return response.data;
   } catch (error) {
     console.error('Get video stats failed:', error);
+    throw error;
+  }
+}
+
+// Get financial breakdown
+export async function getFinancialBreakdown(period: string = '30d') {
+  try {
+    const response = await api.get(`/api/financial/breakdown?period=${period}`);
+    return response.data;
+  } catch (error) {
+    console.error('Get financial breakdown failed:', error);
+    throw error;
+  }
+}
+
+// Get financial cost categories
+export async function getFinancialCostCategories() {
+  try {
+    const response = await api.get('/api/financial/cost-categories');
+    return response.data;
+  } catch (error) {
+    console.error('Get cost categories failed:', error);
+    throw error;
+  }
+}
+
+// Get social followers
+export async function getSocialFollowers() {
+  try {
+    const response = await api.get('/api/social/followers');
+    return response.data;
+  } catch (error) {
+    console.error('Get social followers failed:', error);
+    throw error;
+  }
+}
+
+// Get video analytics performance
+export async function getVideoAnalyticsPerformance() {
+  try {
+    const response = await api.get('/api/video/analytics/performance');
+    return response.data;
+  } catch (error) {
+    console.error('Get video analytics performance failed:', error);
+    throw error;
+  }
+}
+
+// Get automation status
+export async function getAutomationStatus() {
+  try {
+    const response = await api.get('/api/working-automation/status');
+    return response.data;
+  } catch (error) {
+    console.error('Get automation status failed:', error);
+    throw error;
+  }
+}
+
+// Toggle automation
+export async function toggleAutomation(enabled: boolean) {
+  try {
+    const response = await api.post('/api/working-automation/toggle', { enabled });
+    return response.data;
+  } catch (error) {
+    console.error('Toggle automation failed:', error);
+    throw error;
+  }
+}
+
+// Update automation schedule
+export async function updateAutomationSchedule(schedule: Record<string, unknown>) {
+  try {
+    const response = await api.post('/api/working-automation/update-schedule', schedule);
+    return response.data;
+  } catch (error) {
+    console.error('Update automation schedule failed:', error);
+    throw error;
+  }
+}
+
+// Get automation recent actions
+export async function getAutomationRecentActions() {
+  try {
+    const response = await api.get('/api/working-automation/recent-actions');
+    return response.data;
+  } catch (error) {
+    console.error('Get automation recent actions failed:', error);
+    throw error;
+  }
+}
+
+// Generate AI caption
+export async function generateCaption(options: {
+  topic: string;
+  tone: string;
+  platform: string;
+  include_hashtags: boolean;
+  max_length: number;
+}) {
+  try {
+    const response = await api.post('/api/social/caption', options);
+    return response.data;
+  } catch (error) {
+    console.error('Generate caption failed:', error);
+    throw error;
+  }
+}
+
+// Get business insights
+export async function getBusinessInsights() {
+  try {
+    const response = await api.get('/api/advanced-business-intelligence/business-insights');
+    return response.data;
+  } catch (error) {
+    console.error('Get business insights failed:', error);
+    throw error;
+  }
+}
+
+// Get predictive analytics
+export async function getPredictiveAnalytics() {
+  try {
+    const response = await api.get('/api/advanced-business-intelligence/predictive-analytics');
+    return response.data;
+  } catch (error) {
+    console.error('Get predictive analytics failed:', error);
+    throw error;
+  }
+}
+
+// Get comprehensive analytics
+export async function getComprehensiveAnalytics() {
+  try {
+    const response = await api.get('/api/advanced-business-intelligence/comprehensive-analytics');
+    return response.data;
+  } catch (error) {
+    console.error('Get comprehensive analytics failed:', error);
     throw error;
   }
 }

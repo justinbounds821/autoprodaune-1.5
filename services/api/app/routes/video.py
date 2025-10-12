@@ -94,12 +94,19 @@ except Exception as e:
     logging.exception("Pillow import failed: %s", e)
     raise
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 router = APIRouter(
     prefix="/api/video",
     tags=["video"],
     responses={404: {"description": "Not found"}}
 )
+
+# Dev auth bypass helper
+def _ensure_auth_or_dev(_auth: HTTPAuthorizationCredentials | None) -> None:
+    if os.getenv("DEV_ALLOW_ANON", "false").lower() == "true":
+        return
+    if not _auth or not getattr(_auth, "credentials", None):
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 # DTO-uri mutate �n schemas/video.py
 # Job status enum
@@ -222,6 +229,7 @@ async def retry_video_job(
         Dicționar cu rezultatul operației
     """
     try:
+        _ensure_auth_or_dev(_auth)
         # Import serviciu
         from ..services.video_queue import VideoQueueSupabase
         
@@ -257,6 +265,7 @@ async def generate_video(
         Dicționar cu rezultatul operației
     """
     try:
+        _ensure_auth_or_dev(_auth)
         # Creează job ID și job-ul în baza de date
         job_id = f"video_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
@@ -291,7 +300,8 @@ async def generate_video(
 
 @router.post("/internal-generate", status_code=200)
 async def generate_internal_video(
-    text: str = Form(..., description="Textul pentru voice-over"),
+    text: Optional[str] = Form(None, description="Textul pentru voice-over"),
+    script: Optional[str] = Form(None, description="Alias pentru text (compatibilitate FE)"),
     voice_style: str = Form("professional", description="Stilul vocii: professional, empathetic, confident, manole"),
     background_type: str = Form("gradient", description="Tip background: gradient, solid"),
     aspect_ratio: str = Form("16:9", description="Aspect ratio: 16:9, 9:16, 1:1"),
@@ -312,10 +322,13 @@ async def generate_internal_video(
         from ..services.video_orchestrator import get_video_orchestrator, VideoType
         
         orchestrator = get_video_orchestrator()
+        prompt_text = text or script
+        if not prompt_text:
+            raise HTTPException(status_code=400, detail="Missing 'text' or 'script' field")
         result = await orchestrator.generate_video(
             video_type=VideoType.GENERIC,
             context={
-                "text": text,
+                "text": prompt_text,
                 "voice_style": voice_style,
                 "background_type": background_type,
                 "aspect_ratio": aspect_ratio,
@@ -638,6 +651,7 @@ async def cancel_video_job(
         Dicționar cu rezultatul operației
     """
     try:
+        _ensure_auth_or_dev(_auth)
         # Marchează job-ul ca fiind anulat în baza de date
         result = get_supabase_service_instance()._table_update_eq(
             "video_jobs", 
@@ -1347,5 +1361,3 @@ async def list_heygen_avatars():
                 {"id": "friendly_woman", "name": "Friendly Advisor", "preview": ""}
             ]
         }
-
-

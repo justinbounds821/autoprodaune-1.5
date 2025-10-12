@@ -12,6 +12,7 @@ import AutomationControl from './AutomationControl';
 import SocialMedia from './SocialMedia';
 import FinancialDashboard from './FinancialDashboard';
 import LeadManagement from './LeadManagement';
+import AssetsManager from '../components/AssetsManager';
 
 const queryClient = new QueryClient();
 
@@ -58,6 +59,7 @@ const AdminApp: React.FC = () => {
             <Route path="social" element={<SocialMedia />} />
             <Route path="financial" element={<FinancialDashboard />} />
             <Route path="leads" element={<LeadManagement />} />
+            <Route path="assets" element={<AssetsManager />} />
             <Route path="*" element={<Navigate to="dashboard" replace />} />
           </Routes>
         </AdminLayout>

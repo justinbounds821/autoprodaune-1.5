@@ -4,6 +4,8 @@
  * File Length: < 200 lines ✅
  */
 
+import api from '@/services/autoproApi';
+
 export interface InsightData {
   id: string;
   type: 'trend' | 'prediction' | 'recommendation' | 'alert';
@@ -12,7 +14,7 @@ export interface InsightData {
   confidence: number;
   impact: 'low' | 'medium' | 'high' | 'critical';
   category: 'leads' | 'financial' | 'social' | 'operations';
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   created_at: string;
 }
 
@@ -23,65 +25,77 @@ export interface AIInsightMetrics {
   categories: Record<string, number>;
 }
 
+export interface AIInsightsAPIContext {
+  window: { start: string; end: string };
+  source_counts: Record<string, number>;
+}
+
+export interface AIInsightsAPIResponse {
+  insights: InsightData[];
+  metrics: AIInsightMetrics;
+  context: AIInsightsAPIContext;
+}
+
 export class AIInsightsManager {
   private insights: InsightData[] = [];
   private metrics: AIInsightMetrics | null = null;
+  private context: AIInsightsAPIContext | null = null;
 
-  async loadInsights(): Promise<InsightData[]> {
+  async loadInsights(filters?: Record<string, unknown>): Promise<InsightData[]> {
     try {
-      // Simulated AI insights - în producție ar fi API call
-      const mockInsights: InsightData[] = [
-        {
-          id: '1',
-          type: 'prediction',
-          title: 'Creștere Așteptată în Leads',
-          description: 'AI prezice o creștere de 23% în leads pentru următoarele 30 de zile',
-          confidence: 87,
-          impact: 'high',
-          category: 'leads',
-          data: { predicted_increase: 23, period: '30d', factors: ['seasonal', 'marketing_campaign'] },
-          created_at: '2025-01-15T10:00:00Z'
-        },
-        {
-          id: '2',
-          type: 'alert',
-          title: 'Costuri Marketing Peste Buget',
-          description: 'Costurile de marketing au depășit bugetul cu 15%',
-          confidence: 95,
-          impact: 'critical',
-          category: 'financial',
-          data: { overspend_percentage: 15, budget_category: 'marketing', amount: 750 },
-          created_at: '2025-01-15T09:30:00Z'
-        },
-        {
-          id: '3',
-          type: 'recommendation',
-          title: 'Optimizare Postare Social Media',
-          description: 'Postează pe Instagram între 18:00-20:00 pentru engagement maxim',
-          confidence: 78,
-          impact: 'medium',
-          category: 'social',
-          data: { platform: 'Instagram', optimal_time: '18:00-20:00', expected_engagement: '+34%' },
-          created_at: '2025-01-15T08:45:00Z'
-        }
-      ];
+      const response = await api.getAIInsights(filters);
       
-      this.insights = mockInsights;
+      // Map backend response to InsightData format
+      if (response.insights && Array.isArray(response.insights)) {
+        this.insights = response.insights.map((insight: {
+          id: string;
+          title: string;
+          description: string;
+          impact_score: number;
+          confidence: number;
+          tags: string[];
+          category: string;
+          type: string;
+          metrics: Record<string, number>;
+          created_at: string;
+        }) => ({
+          id: insight.id,
+          type: insight.type as InsightData['type'] || 'recommendation',
+          title: insight.title,
+          description: insight.description,
+          confidence: insight.confidence,
+          impact: this.mapImpactScore(insight.impact_score),
+          category: insight.category as InsightData['category'] || 'operations',
+          data: insight.metrics || {},
+          created_at: insight.created_at
+        }));
+      } else {
+        this.insights = [];
+      }
+      
+      // Calculate metrics from loaded insights
+      this.metrics = this.calculateMetrics();
+      
       return this.insights;
     } catch (error) {
       console.error('Failed to load AI insights:', error);
-      throw new Error('Failed to load AI insights');
+      // Return empty array on error to allow UI to display fallback
+      this.insights = [];
+      this.metrics = this.calculateMetrics();
+      return this.insights;
     }
   }
 
   async generateInsight(type: InsightData['type'], category: InsightData['category']): Promise<InsightData> {
     try {
+      // In a real scenario, this would call backend to generate insight
+      // For now, generate locally
       const newInsight: InsightData = {
         id: Date.now().toString(),
         type,
         title: this.generateInsightTitle(type, category),
         description: this.generateInsightDescription(type, category),
-        confidence: Math.floor(Math.random() * 30) + 70, // 70-100%
+        confidence: Math.floor(Math.random() * 30) + 70,
         impact: this.determineImpact(type),
         category,
         data: this.generateInsightData(type, category),
@@ -89,6 +103,8 @@ export class AIInsightsManager {
       };
 
       this.insights.unshift(newInsight);
+      this.metrics = this.calculateMetrics();
+      
       return newInsight;
     } catch (error) {
       console.error('Failed to generate insight:', error);
@@ -97,10 +113,17 @@ export class AIInsightsManager {
   }
 
   getMetrics(): AIInsightMetrics {
+    if (this.metrics) {
+      return this.metrics;
+    }
+    return this.calculateMetrics();
+  }
+
+  private calculateMetrics(): AIInsightMetrics {
     const total_insights = this.insights.length;
     const high_confidence_insights = this.insights.filter(i => i.confidence >= 80).length;
     const critical_alerts = this.insights.filter(i => i.impact === 'critical').length;
-    
+
     const categories = this.insights.reduce((acc, insight) => {
       acc[insight.category] = (acc[insight.category] || 0) + 1;
       return acc;
@@ -114,6 +137,10 @@ export class AIInsightsManager {
     };
   }
 
+  getContext(): AIInsightsAPIContext | null {
+    return this.context;
+  }
+
   getInsightsByCategory(category: InsightData['category']): InsightData[] {
     return this.insights.filter(insight => insight.category === category);
   }
@@ -122,8 +149,15 @@ export class AIInsightsManager {
     return this.insights.filter(insight => insight.type === type);
   }
 
+  private mapImpactScore(score: number): InsightData['impact'] {
+    if (score >= 90) return 'critical';
+    if (score >= 70) return 'high';
+    if (score >= 40) return 'medium';
+    return 'low';
+  }
+
   private generateInsightTitle(type: InsightData['type'], category: InsightData['category']): string {
-    const titles = {
+    const titles: Record<InsightData['type'], Record<InsightData['category'], string>> = {
       trend: {
         leads: 'Tendințe în Leads',
         financial: 'Tendințe Financiare',
@@ -133,7 +167,7 @@ export class AIInsightsManager {
       prediction: {
         leads: 'Predicție Leads',
         financial: 'Predicție Financiară',
-        social: 'Predicție Social Media',
+        social: 'Predicție Socială',
         operations: 'Predicție Operațională'
       },
       recommendation: {
@@ -145,7 +179,7 @@ export class AIInsightsManager {
       alert: {
         leads: 'Alertă Leads',
         financial: 'Alertă Financiară',
-        social: 'Alertă Social Media',
+        social: 'Alertă Socială',
         operations: 'Alertă Operațională'
       }
     };
@@ -153,7 +187,7 @@ export class AIInsightsManager {
   }
 
   private generateInsightDescription(type: InsightData['type'], category: InsightData['category']): string {
-    const descriptions = {
+    const descriptions: Record<InsightData['type'], string> = {
       trend: 'AI a identificat o tendință interesantă în datele tale',
       prediction: 'AI prezice o evoluție pozitivă în următoarea perioadă',
       recommendation: 'AI recomandă o optimizare pentru îmbunătățirea performanței',
@@ -163,16 +197,16 @@ export class AIInsightsManager {
   }
 
   private determineImpact(type: InsightData['type']): InsightData['impact'] {
-    const impactMap = {
-      alert: 'critical' as const,
-      prediction: 'high' as const,
-      recommendation: 'medium' as const,
-      trend: 'low' as const
+    const impactMap: Record<InsightData['type'], InsightData['impact']> = {
+      alert: 'critical',
+      prediction: 'high',
+      recommendation: 'medium',
+      trend: 'low'
     };
     return impactMap[type];
   }
 
-  private generateInsightData(type: InsightData['type'], category: InsightData['category']): Record<string, any> {
+  private generateInsightData(type: InsightData['type'], category: InsightData['category']): Record<string, unknown> {
     return {
       type,
       category,

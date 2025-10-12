@@ -84,6 +84,34 @@ ERROR_COUNT = Counter(
     registry=REGISTRY
 )
 
+# Video engine metrics
+VIDEO_BACKEND_AVAILABLE = Gauge(
+    'autopro_backend_available',
+    'Video backend availability (1=available, 0=unavailable)',
+    ['backend'],
+    registry=REGISTRY
+)
+
+VIDEO_PROCESSING_DURATION = Histogram(
+    'autopro_video_processing_duration_seconds',
+    'Video processing duration in seconds',
+    ['result'],
+    registry=REGISTRY
+)
+
+VIDEO_SIZE_BYTES = Histogram(
+    'autopro_video_size_bytes',
+    'Generated video file size in bytes',
+    registry=REGISTRY
+)
+
+VIDEO_QUEUE_SIZE = Gauge(
+    'autopro_queue_size',
+    'Number of videos in queue by status',
+    ['status'],
+    registry=REGISTRY
+)
+
 class MonitoringManager:
     """
     Central monitoring and logging manager for AutoPro Daune.
@@ -100,6 +128,12 @@ class MonitoringManager:
         # Performance tracking
         self.performance_data = {}
         self.start_time = time.time()
+
+        # Initialize video metrics with default values
+        VIDEO_BACKEND_AVAILABLE.labels(backend='sadtalker').set(0)
+        VIDEO_BACKEND_AVAILABLE.labels(backend='heygen').set(0)
+        VIDEO_QUEUE_SIZE.labels(status='queued').set(0)
+        VIDEO_QUEUE_SIZE.labels(status='processing').set(0)
 
         self.logger.info("✅ MonitoringManager initialized with SupabaseService integration")
 
@@ -166,12 +200,15 @@ class MonitoringManager:
                 "created_at": datetime.now().isoformat()
             }
 
-            await asyncio.create_task(self._log_to_database(log_entry))
+            # Run database logging in thread pool to avoid blocking
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                executor.submit(self._log_to_database, log_entry)
 
         except Exception as e:
             self.logger.error(f"❌ Failed to log event: {e}")
 
-    async def _log_to_database(self, log_entry: Dict[str, Any]):
+    def _log_to_database(self, log_entry: Dict[str, Any]):
         """Log entry to database using SupabaseService (non-blocking)."""
         try:
             # Use existing SupabaseService app_log method
@@ -231,11 +268,36 @@ class MonitoringManager:
             today = datetime.now().date()
             daily_summary = await self.db.get_daily_summary(today)
 
+            # Posts published today from real DB (fallback-safe)
+            posts_today = 0
+            try:
+                start = datetime.combine(today, datetime.min.time()).isoformat()
+                end = datetime.combine(today, datetime.max.time()).isoformat()
+                res = self.db.client.table("social_posts").select("status,created_at,posted_at").gte("created_at", start).lte("created_at", end).execute()
+                rows = res.data or []
+                posts_today = sum(1 for r in rows if (r.get("status") or "").lower() in ("published", "posted"))
+                # keep gauge in sync
+                DAILY_POSTS_COMPLETED.set(posts_today)
+            except Exception:
+                # keep previous gauge if query fails
+                posts_today = int(DAILY_POSTS_COMPLETED._value._value)
+
             # Get recent errors
             error_logs = await self._get_recent_errors()
 
             # API response times
             avg_response_time = self._calculate_avg_response_time()
+
+            # Automation status: prefer gauge (can be updated by scheduler or working_automation)
+            automation_running = AUTOMATION_STATUS._value._value > 0
+            # Best-effort: sync gauge from scheduler if accessible, but do not override computed return value
+            try:
+                from ..services.automation_scheduler import get_automation_scheduler  # type: ignore
+                status = get_automation_scheduler().get_status()
+                # keep gauge consistent if scheduler state is known
+                AUTOMATION_STATUS.set(1 if bool(status.get("is_running", False)) else 0)
+            except Exception:
+                pass
 
             return {
                 "status": "healthy" if db_healthy else "degraded",
@@ -244,8 +306,8 @@ class MonitoringManager:
                 "daily_summary": daily_summary,
                 "recent_errors": len(error_logs),
                 "avg_response_time_ms": avg_response_time,
-                "automation_active": AUTOMATION_STATUS._value._value > 0,
-                "posts_today": int(DAILY_POSTS_COMPLETED._value._value),
+                "automation_active": automation_running,
+                "posts_today": posts_today,
                 "last_check": datetime.now().isoformat()
             }
 
@@ -269,8 +331,20 @@ class MonitoringManager:
     def _calculate_avg_response_time(self) -> float:
         """Calculate average API response time."""
         try:
-            # This would calculate from the histogram, simplified for now
-            return 150.0  # Mock average in milliseconds
+            # Compute average from Histogram samples (_sum / _count)
+            metrics = API_DURATION.collect()
+            total_sum = 0.0
+            total_count = 0.0
+            for m in metrics:
+                for s in m.samples:
+                    # sample names end with _sum or _count
+                    if s.name.endswith("_sum"):
+                        total_sum += float(s.value)
+                    elif s.name.endswith("_count"):
+                        total_count += float(s.value)
+            if total_count > 0:
+                return (total_sum / total_count) * 1000.0  # milliseconds
+            return 0.0
         except Exception:
             return 0.0
 

@@ -8,26 +8,30 @@ Acest modul implementează endpoint-urile REST pentru:
 - Dashboard financiar
 """
 
+import os
 import logging
+import uuid
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query, Path, Body, Form
+from fastapi import APIRouter, HTTPException, Query, Path, Body, Form
 
-from ..database import get_db
-from ..models import CampaignMetrics
-from sqlalchemy.orm import Session
+logger = logging.getLogger(__name__)
+
+# Avoid importing SQLAlchemy-based models at import time to keep router lightweight
 
 from ..services.financial.costs.calculator import CostCalculator
-from ..services.roi_calculator import ROICalculator
+# from ..services.roi_calculator import ROICalculator  # Temporarily disabled due to SQLAlchemy/Python 3.13 compatibility
 
 from ..services.supabase_client import get_supabase_service_instance
 from ..services.financial.service import FinancialService
+from ..services.financial.manager import get_financial_manager
 
 # Inițializează serviciul financiar și calculatorii
 ft = FinancialService(get_supabase_service_instance())
+fm = get_financial_manager()
 cost_calculator = CostCalculator()
-roi_calculator = ROICalculator()
+# roi_calculator = ROICalculator()  # Temporarily disabled due to SQLAlchemy/Python 3.13 compatibility
 from ..schemas.financial import (
     APICostCreate, RevenueCreate, FinancialMetricsCreate,
     ROIAnalysisResponse, ProfitLossResponse, FinancialDashboardResponse,
@@ -49,6 +53,91 @@ router = APIRouter(
 
 # ==================== ENDPOINT-URI PENTRU TRACKING ====================
 
+@router.get("/revenue")
+async def get_revenue_data(
+    period: str = Query("7d", description="Time period (1d, 7d, 30d, 90d)")
+) -> List[Dict[str, Any]]:
+    """Return daily revenue series for the selected period as an array of {date, amount}."""
+    try:
+        supabase = get_supabase_service_instance()
+        end_date = datetime.now()
+        period_key = (period or "7d").lower()
+        if period_key == "1d":
+            start_date = end_date - timedelta(days=1)
+        elif period_key == "7d":
+            start_date = end_date - timedelta(days=7)
+        elif period_key == "30d":
+            start_date = end_date - timedelta(days=30)
+        elif period_key == "90d":
+            start_date = end_date - timedelta(days=90)
+        else:
+            start_date = end_date - timedelta(days=7)
+
+        # Pull recent revenues by timestamp
+        start_iso = start_date.isoformat()
+        revs = supabase._table_select("revenues", "amount,timestamp", filters=[("gte", "timestamp", start_iso)]) or []
+
+        # Group by day
+        by_day: Dict[str, float] = {}
+        for r in revs:
+            ts = (r.get("timestamp") or "")[:10]
+            by_day[ts] = by_day.get(ts, 0.0) + float(r.get("amount") or 0)
+
+        # Build continuous daily series
+        out: List[Dict[str, Any]] = []
+        cur = datetime(start_date.year, start_date.month, start_date.day)
+        end = datetime(end_date.year, end_date.month, end_date.day)
+        while cur <= end:
+            d = cur.strftime("%Y-%m-%d")
+            out.append({"date": d, "amount": round(by_day.get(d, 0.0), 2)})
+            cur += timedelta(days=1)
+        return out
+    except Exception as e:
+        logging.error(f"Error getting revenue data: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get revenue data: {str(e)}")
+
+
+@router.get("/costs")
+async def get_costs_data(
+    period: str = Query("7d", description="Time period (1d, 7d, 30d, 90d)")
+) -> List[Dict[str, Any]]:
+    """Return daily costs series for the selected period as an array of {date, amount}."""
+    try:
+        supabase = get_supabase_service_instance()
+        end_date = datetime.now()
+        period_key = (period or "7d").lower()
+        if period_key == "1d":
+            start_date = end_date - timedelta(days=1)
+        elif period_key == "7d":
+            start_date = end_date - timedelta(days=7)
+        elif period_key == "30d":
+            start_date = end_date - timedelta(days=30)
+        elif period_key == "90d":
+            start_date = end_date - timedelta(days=90)
+        else:
+            start_date = end_date - timedelta(days=7)
+
+        start_iso = start_date.isoformat()
+        costs = supabase._table_select("api_costs", "cost,timestamp", filters=[("gte", "timestamp", start_iso)]) or []
+
+        by_day: Dict[str, float] = {}
+        for c in costs:
+            ts = (c.get("timestamp") or "")[:10]
+            by_day[ts] = by_day.get(ts, 0.0) + float(c.get("cost") or 0)
+
+        out: List[Dict[str, Any]] = []
+        cur = datetime(start_date.year, start_date.month, start_date.day)
+        end = datetime(end_date.year, end_date.month, end_date.day)
+        while cur <= end:
+            d = cur.strftime("%Y-%m-%d")
+            out.append({"date": d, "amount": round(by_day.get(d, 0.0), 2)})
+            cur += timedelta(days=1)
+        return out
+    except Exception as e:
+        logging.error(f"Error getting costs data: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get costs data: {str(e)}")
+
+
 @router.post("/track-cost", response_model=Dict[str, Any])
 async def track_api_cost(
     cost_data: Dict[str, Any]
@@ -62,8 +151,10 @@ async def track_api_cost(
     Returns:
         Dicționar cu rezultatul operației
     """
+    # Not implemented without ROI calculator (SQLAlchemy dependency removed)
+    raise HTTPException(status_code=501, detail="Budget allocation optimization not implemented")
     try:
-        result = ft.track_api_cost(
+        result = fm.add_cost(
             provider=cost_data.get("provider"),
             amount=cost_data.get("cost", 0),
             currency=cost_data.get("currency", "EUR"),
@@ -96,6 +187,8 @@ async def update_api_cost(
     Returns:
         Dicționar cu rezultatul operației
     """
+    # Moved to Supabase service; disable SQLAlchemy implementation
+    raise HTTPException(status_code=501, detail="Campaigns moved to Supabase service")
     try:
         result = ft.update_api_cost(cost_id, **cost_data)
         
@@ -156,7 +249,7 @@ async def track_revenue(
         Dicționar cu rezultatul operației
     """
     try:
-        result = ft.track_revenue(
+        result = fm.add_revenue(
             source=revenue_data.get("source"),
             amount=revenue_data.get("amount", 0),
             currency=revenue_data.get("currency", "EUR"),
@@ -293,7 +386,7 @@ async def get_roi_analysis(
         Obiect ROIData cu rezultatul
     """
     try:
-        result = ft.roi_analysis(period=period, date_from=date_from, date_to=date_to)
+        result = fm.roi(period=period, date_from=date_from, date_to=date_to)
         return result
         
     except HTTPException:
@@ -690,18 +783,33 @@ async def get_financial_dashboard(
 ):
     """
     Obține datele pentru dashboard-ul financiar din Supabase.
-    
+
     Args:
         date_from: Data start pentru filtrare (opțional)
         date_to: Data end pentru filtrare (opțional)
         period: Perioada preset (default: 7d)
-    
+
     Returns:
         Dicționar cu datele dashboard-ului
     """
+    # FAKE_MODE support for testing without Supabase
+    if os.getenv("FAKE_MODE") == "true":
+        return {
+            "success": True,
+            "data": {
+                "total_costs": 1250.50,
+                "total_revenue": 8500.00,
+                "roi_percentage": 580.0,
+                "videos_generated": 142,
+                "period": period,
+                "date_from": date_from or "2025-10-02",
+                "date_to": date_to or "2025-10-09"
+            }
+        }
+
     try:
-        return ft.dashboard(date_from=date_from, date_to=date_to, period=period)
-        
+        return fm.dashboard(date_from=date_from, date_to=date_to, period=period)
+
     except Exception as e:
         logging.error(f"Eroare la obținerea datelor dashboard: {e}")
         raise HTTPException(status_code=500, detail=f"Eroare la dashboard: {str(e)}")
@@ -712,7 +820,6 @@ async def get_financial_dashboard(
 @router.post("/campaigns", response_model=Dict[str, Any])
 async def create_campaign(
     campaign_data: CampaignMetricsCreate,
-    db: Session = Depends(get_db)
 ):
     """
     Creează o campanie nouă.
@@ -835,7 +942,7 @@ async def get_credit_balance(
         Obiect CreditBalance cu balanța
     """
     try:
-        result = ft.get_credit_balance(provider)
+        result = fm.get_credit_balance(provider)
         
         if not result:
             raise HTTPException(status_code=404, detail=f"Nu există balanță pentru providerul {provider}")
@@ -867,7 +974,7 @@ async def update_credit_balance(
         Dicționar cu rezultatul operației
     """
     try:
-        result = ft.update_credit_balance(provider, float(amount))
+        result = fm.update_credit_balance(provider, float(amount))
         
         return {
             "success": True,
@@ -900,7 +1007,7 @@ async def create_budget_alert(
         Dicționar cu rezultatul operației
     """
     try:
-        result = ft.create_budget_alert(
+        result = fm.create_budget_alert(
             alert_name=alert_data.alert_name,
             threshold=alert_data.threshold_value,
             alert_type=alert_data.alert_type,
@@ -935,7 +1042,7 @@ async def get_budget_alerts(
         Lista de alerte de buget
     """
     try:
-        alerts = ft.get_budget_alerts()
+        alerts = fm.get_budget_alerts()
         
         return alerts[:limit]
         

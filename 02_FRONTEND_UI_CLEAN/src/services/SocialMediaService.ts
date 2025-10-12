@@ -88,7 +88,7 @@ class SocialMediaService {
    * Create and publish a new post
    */
   async createPost(data: CreatePostDto): Promise<SocialPost> {
-    const response = await api.post('/social/post', data);
+    const response = await api.post('/social/posts', data);
     return response.data;
   }
 
@@ -103,7 +103,8 @@ class SocialMediaService {
    * Get social media statistics for all platforms
    */
   async getStats(): Promise<SocialStats> {
-    const response = await api.get('/social/stats');
+    // Map to backend summary/followers endpoints
+    const response = await api.get('/social/followers');
     return response.data;
   }
 
@@ -111,7 +112,7 @@ class SocialMediaService {
    * Get platform-specific statistics
    */
   async getPlatformStats(platform: 'tiktok' | 'instagram' | 'facebook' | 'youtube'): Promise<PlatformStats> {
-    const response = await api.get(`/social/stats/${platform}`);
+    const response = await api.get(`/social/followers/${platform}`);
     return response.data;
   }
 
@@ -149,7 +150,8 @@ class SocialMediaService {
    * Schedule a post for later
    */
   async schedulePost(data: CreatePostDto): Promise<SocialPost> {
-    const response = await api.post('/social/schedule', data);
+    // No dedicated schedule endpoint; create as 'scheduled' post
+    const response = await api.post('/social/posts', { ...data, status: 'scheduled' });
     return response.data;
   }
 
