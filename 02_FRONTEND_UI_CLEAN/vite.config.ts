@@ -26,5 +26,59 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          // Vendor chunks
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom')) {
+              return 'react-vendor';
+            }
+            if (id.includes('@radix-ui')) {
+              return 'ui-vendor';
+            }
+            if (id.includes('recharts') || id.includes('lucide-react')) {
+              return 'chart-vendor';
+            }
+            if (id.includes('@tanstack')) {
+              return 'query-vendor';
+            }
+            return 'vendor';
+          }
+          
+          // Feature chunks by path
+          if (id.includes('/src/pages/Dashboard')) {
+            return 'dashboard';
+          }
+          if (id.includes('/src/pages/AdminApp') || id.includes('/src/components/admin')) {
+            return 'admin';
+          }
+          if (id.includes('/src/pages/VideoManagement')) {
+            return 'video';
+          }
+          if (id.includes('/src/pages/AutomationControl')) {
+            return 'automation';
+          }
+          if (id.includes('/src/pages/FinancialDashboard')) {
+            return 'financial';
+          }
+          if (id.includes('/src/pages/SocialMedia')) {
+            return 'social';
+          }
+          if (id.includes('/src/pages/LeadManagement')) {
+            return 'leads';
+          }
+          if (id.includes('/src/components/ai-insights')) {
+            return 'ai-insights';
+          }
+          if (id.includes('/src/components/AdvancedAnalytics')) {
+            return 'analytics';
+          }
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000, // Increase limit to 1MB
+  },
 }));
 // bridge: END vite server
