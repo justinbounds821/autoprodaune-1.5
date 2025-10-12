@@ -96,7 +96,6 @@ export default function CronScheduleEditor() {
   const loadCronJobs = async () => {
     try {
       setLoading(true);
-<<<<<<< Current (Your changes)
       const resp = await fetch('/api/working-automation/status');
       if (!resp.ok) throw new Error('Failed to load automation status');
       const data = await resp.json();
@@ -114,41 +113,6 @@ export default function CronScheduleEditor() {
         nextRun: status.next_scheduled_post || t,
       }));
       setJobs(items);
-=======
-      const response = await getAutomationStatus();
-      
-      // Map automation status to cron jobs
-      const automationJobs: CronJob[] = response.jobs?.map((job: {
-        id: string;
-        name: string;
-        enabled: boolean;
-        schedule: string;
-        last_run: string | null;
-        next_run: string;
-      }) => {
-        const scheduleParts = parseCronExpression(job.schedule);
-        return {
-          id: job.id,
-          name: job.name,
-          description: '',
-          enabled: job.enabled,
-          schedule: scheduleParts || {
-            minute: '0',
-            hour: '9',
-            dayOfMonth: '*',
-            month: '*',
-            dayOfWeek: '*'
-          },
-          action: 'post_content' as CronJob['action'],
-          platforms: ['TikTok'],
-          lastRun: job.last_run,
-          nextRun: job.next_run
-        };
-      }) || [];
-
-      setJobs(automationJobs);
-      setGlobalEnabled(response.enabled || false);
->>>>>>> Incoming (Background Agent changes)
     } catch (error) {
       console.error('Failed to load cron jobs:', error);
       toast({
