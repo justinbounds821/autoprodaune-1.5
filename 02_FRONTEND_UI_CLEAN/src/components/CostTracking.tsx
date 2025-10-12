@@ -33,16 +33,9 @@ import {
   BarChart3
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getFinancialBreakdown, handleApiError } from '@/services/apiService';
+import type { CostEntry } from '@/types/api';
 
-interface CostEntry {
-  id: string;
-  amount: number;
-  category: string;
-  description: string;
-  date: string;
-  recurring: boolean;
-  tags: string[];
-}
 
 interface CategorySummary {
   category: string;
@@ -50,6 +43,11 @@ interface CategorySummary {
   count: number;
   percentage: number;
   color: string;
+}
+
+interface LocalCostEntry extends CostEntry {
+  recurring?: boolean;
+  tags?: string[];
 }
 
 const COST_CATEGORIES = [
@@ -76,7 +74,7 @@ const COLORS = [
 
 export default function CostTracking() {
   const { toast } = useToast();
-  const [costs, setCosts] = useState<CostEntry[]>([]);
+  const [costs, setCosts] = useState<LocalCostEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingCost, setEditingCost] = useState<CostEntry | null>(null);
@@ -94,51 +92,35 @@ export default function CostTracking() {
 
   useEffect(() => {
     loadCosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     calculateCategorySummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [costs]);
 
   const loadCosts = async () => {
     try {
       setLoading(true);
-      // Simulated data - în producție ar fi API call
-      const mockCosts: CostEntry[] = [
-        {
-          id: '1',
-          amount: 1500,
-          category: 'Marketing',
-          description: 'Google Ads campaign',
-          date: '2025-01-01',
-          recurring: false,
-          tags: ['ads', 'google']
-        },
-        {
-          id: '2',
-          amount: 800,
-          category: 'Software',
-          description: 'Supabase Pro subscription',
-          date: '2025-01-01',
-          recurring: true,
-          tags: ['subscription', 'database']
-        },
-        {
-          id: '3',
-          amount: 200,
-          category: 'Development',
-          description: 'API keys and services',
-          date: '2025-01-02',
-          recurring: false,
-          tags: ['api', 'external']
-        }
-      ];
-      setCosts(mockCosts);
+      const breakdown = await getFinancialBreakdown('30d');
+      
+      // Convert top costs to LocalCostEntry format
+      const costsData: LocalCostEntry[] = (breakdown.costs?.top || []).map(cost => ({
+        ...cost,
+        category: cost.metadata?.category || 'Uncategorized',
+        description: cost.operation,
+        date: cost.timestamp,
+        recurring: false,
+        tags: []
+      }));
+      
+      setCosts(costsData);
     } catch (error) {
       console.error('Failed to load costs:', error);
       toast({
         title: "Eroare",
-        description: "Nu s-au putut încărca costurile.",
+        description: handleApiError(error),
         variant: "destructive",
       });
     } finally {
@@ -165,71 +147,26 @@ export default function CostTracking() {
   };
 
   const handleAddCost = async () => {
-    try {
-      const newCost: CostEntry = {
-        id: Date.now().toString(),
-        amount: parseFloat(formData.amount),
-        category: formData.category,
-        description: formData.description,
-        date: formData.date,
-        recurring: formData.recurring,
-        tags: formData.tags.split(',').map(tag => tag.trim()).filter(Boolean)
-      };
-
-      setCosts(prev => [...prev, newCost]);
-      
-      toast({
-        title: "Cost adăugat",
-        description: `Cost de ${formData.amount} LEI adăugat cu succes.`,
-      });
-
-      setFormData({
-        amount: '',
-        category: '',
-        description: '',
-        date: new Date().toISOString().split('T')[0],
-        recurring: false,
-        tags: ''
-      });
-      setIsAddDialogOpen(false);
-
-    } catch (error) {
-      toast({
-        title: "Eroare",
-        description: "Nu s-a putut adăuga costul.",
-        variant: "destructive",
-      });
-    }
+    toast({
+      title: "Funcție dezactivată",
+      description: "Adăugarea manuală de costuri nu este disponibilă. Costurile sunt automat înregistrate de sistem.",
+      variant: "default",
+    });
+    setIsAddDialogOpen(false);
   };
 
-  const handleEditCost = async (cost: CostEntry) => {
-    // Implementation for edit
-    setEditingCost(cost);
-    setFormData({
-      amount: cost.amount.toString(),
-      category: cost.category,
-      description: cost.description,
-      date: cost.date,
-      recurring: cost.recurring,
-      tags: cost.tags.join(', ')
+  const handleEditCost = async (cost: LocalCostEntry) => {
+    toast({
+      title: "Funcție read-only",
+      description: "Costurile sunt generate automat și nu pot fi editate manual.",
     });
-    setIsAddDialogOpen(true);
   };
 
   const handleDeleteCost = async (id: string) => {
-    try {
-      setCosts(prev => prev.filter(cost => cost.id !== id));
-      toast({
-        title: "Cost șters",
-        description: "Costul a fost șters cu succes.",
-      });
-    } catch (error) {
-      toast({
-        title: "Eroare",
-        description: "Nu s-a putut șterge costul.",
-        variant: "destructive",
-      });
-    }
+    toast({
+      title: "Funcție read-only",
+      description: "Costurile nu pot fi șterse din interfață.",
+    });
   };
 
   const formatCurrency = (amount: number) => {

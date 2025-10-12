@@ -20,27 +20,18 @@ import {
   Plus,
   Calendar,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Settings
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { 
+  getAutomationStatus, 
+  toggleAutomation, 
+  updateAutomationSchedule,
+  handleApiError 
+} from '@/services/apiService';
+import type { AutomationStatus, CronJob } from '@/types/api';
 
-interface CronJob {
-  id: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-  schedule: {
-    minute: string;
-    hour: string;
-    dayOfMonth: string;
-    month: string;
-    dayOfWeek: string;
-  };
-  action: 'post_content' | 'generate_video' | 'send_notifications' | 'backup_data';
-  platforms: string[];
-  lastRun: string | null;
-  nextRun: string;
-}
 
 const CRON_PRESETS = [
   {
@@ -108,42 +99,42 @@ export default function CronScheduleEditor() {
 
   useEffect(() => {
     loadCronJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadCronJobs = async () => {
     try {
       setLoading(true);
-      // Simulated data - în producție ar fi API call
-      const mockJobs: CronJob[] = [
-        {
-          id: '1',
-          name: 'Postare Dimineață',
-          description: 'Postează conținut motivational dimineața',
-          enabled: true,
-          schedule: { minute: '0', hour: '9', dayOfMonth: '*', month: '*', dayOfWeek: '*' },
-          action: 'post_content',
-          platforms: ['TikTok', 'Instagram'],
-          lastRun: '2025-01-01T09:00:00Z',
-          nextRun: '2025-01-02T09:00:00Z'
-        },
-        {
-          id: '2',
-          name: 'Postare Seară',
-          description: 'Postează conținut informativ seara',
-          enabled: true,
-          schedule: { minute: '0', hour: '21', dayOfMonth: '*', month: '*', dayOfWeek: '*' },
-          action: 'post_content',
-          platforms: ['Facebook'],
-          lastRun: '2025-01-01T21:00:00Z',
-          nextRun: '2025-01-02T21:00:00Z'
-        }
-      ];
-      setJobs(mockJobs);
+      const status = await getAutomationStatus();
+      
+      // Convert automation schedule to cron jobs format
+      const cronJobs: CronJob[] = (status.schedule || []).map((time, idx) => {
+        const [hour, minute] = time.split(':');
+        return {
+          id: `${idx + 1}`,
+          name: `Postare automată ${time}`,
+          description: `Postează automat la ora ${time}`,
+          enabled: status.automation_active,
+          schedule: { 
+            minute: minute || '0', 
+            hour: hour || '0', 
+            dayOfMonth: '*', 
+            month: '*', 
+            dayOfWeek: '*' 
+          },
+          action: 'post_content' as const,
+          platforms: ['TikTok', 'Instagram', 'Facebook'],
+          lastRun: status.last_action?.timestamp || null,
+          nextRun: status.next_scheduled_post || new Date().toISOString()
+        };
+      });
+      
+      setJobs(cronJobs);
     } catch (error) {
       console.error('Failed to load cron jobs:', error);
       toast({
         title: "Eroare",
-        description: "Nu s-au putut încărca job-urile cron.",
+        description: handleApiError(error),
         variant: "destructive",
       });
     } finally {
@@ -181,18 +172,25 @@ export default function CronScheduleEditor() {
 
   const toggleJob = async (jobId: string) => {
     try {
-      setJobs(prev => prev.map(job => 
-        job.id === jobId ? { ...job, enabled: !job.enabled } : job
+      const job = jobs.find(j => j.id === jobId);
+      if (!job) return;
+      
+      await toggleAutomation(!job.enabled);
+      
+      setJobs(prev => prev.map(j => 
+        j.id === jobId ? { ...j, enabled: !j.enabled } : j
       ));
       
       toast({
         title: "Job actualizat",
         description: "Statusul job-ului a fost actualizat.",
       });
+      
+      await loadCronJobs(); // Reload to sync with backend
     } catch (error) {
       toast({
         title: "Eroare",
-        description: "Nu s-a putut actualiza job-ul.",
+        description: handleApiError(error),
         variant: "destructive",
       });
     }
@@ -200,34 +198,14 @@ export default function CronScheduleEditor() {
 
   const saveJob = async () => {
     try {
-      const cronExpression = buildCronExpression(formData.schedule);
-      const newJob: CronJob = {
-        id: editingJob?.id || Date.now().toString(),
-        name: formData.name,
-        description: formData.description,
-        enabled: true,
-        schedule: formData.schedule,
-        action: formData.action,
-        platforms: formData.platforms,
-        lastRun: null,
-        nextRun: calculateNextRun(cronExpression)
-      };
+      const newSchedule = [`${formData.schedule.hour}:${formData.schedule.minute}`];
+      await updateAutomationSchedule(newSchedule);
+      
+      toast({
+        title: "Programare actualizată",
+        description: "Programarea automată a fost actualizată.",
+      });
 
-      if (editingJob) {
-        setJobs(prev => prev.map(job => job.id === editingJob.id ? newJob : job));
-        toast({
-          title: "Job actualizat",
-          description: `Job-ul "${newJob.name}" a fost actualizat.`,
-        });
-      } else {
-        setJobs(prev => [newJob, ...prev]);
-        toast({
-          title: "Job creat",
-          description: `Job-ul "${newJob.name}" a fost creat.`,
-        });
-      }
-
-      // Reset form
       setFormData({
         name: '',
         description: '',
@@ -237,30 +215,23 @@ export default function CronScheduleEditor() {
       });
       setIsCreating(false);
       setEditingJob(null);
+      
+      await loadCronJobs(); // Reload to sync with backend
 
     } catch (error) {
       toast({
         title: "Eroare",
-        description: "Nu s-a putut salva job-ul.",
+        description: handleApiError(error),
         variant: "destructive",
       });
     }
   };
 
   const deleteJob = async (jobId: string) => {
-    try {
-      setJobs(prev => prev.filter(job => job.id !== jobId));
-      toast({
-        title: "Job șters",
-        description: "Job-ul a fost șters cu succes.",
-      });
-    } catch (error) {
-      toast({
-        title: "Eroare",
-        description: "Nu s-a putut șterge job-ul.",
-        variant: "destructive",
-      });
-    }
+    toast({
+      title: "Funcție indisponibilă",
+      description: "Job-urile sunt gestionate automat. Puteți doar activa/dezactiva automațiile.",
+    });
   };
 
   const calculateNextRun = (cronExpression: string): string => {

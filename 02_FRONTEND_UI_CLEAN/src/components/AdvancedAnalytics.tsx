@@ -36,40 +36,19 @@ import {
   MessageCircle,
   Calendar,
   Target,
-  Activity
+  Activity,
+  Clock
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { 
+  getFinancialBreakdown, 
+  getSocialFollowers, 
+  getVideoAnalytics,
+  handleApiError 
+} from '@/services/apiService';
+import type { AnalyticsData } from '@/types/api';
 
-interface AnalyticsData {
-  overview: {
-    totalLeads: number;
-    conversionRate: number;
-    avgResponseTime: number;
-    revenue: number;
-    socialEngagement: number;
-    videoViews: number;
-  };
-  leads: {
-    daily: Array<{ date: string; leads: number; conversions: number }>;
-    sources: Array<{ source: string; count: number; percentage: number }>;
-    status: Array<{ status: string; count: number; color: string }>;
-  };
-  social: {
-    platforms: Array<{ platform: string; followers: number; engagement: number; posts: number }>;
-    engagement: Array<{ date: string; likes: number; shares: number; comments: number }>;
-    topPosts: Array<{ id: string; content: string; engagement: number; platform: string }>;
-  };
-  financial: {
-    revenue: Array<{ month: string; revenue: number; costs: number; profit: number }>;
-    categories: Array<{ category: string; amount: number; percentage: number; color: string }>;
-  };
-  video: {
-    performance: Array<{ date: string; views: number; completionRate: number }>;
-    topics: Array<{ topic: string; views: number; engagement: number }>;
-  };
-}
-
-const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff00', '#ff00ff'];
+const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#10B981', '#8B5CF6'];
 
 export default function AdvancedAnalytics() {
   const { toast } = useToast();
@@ -79,113 +58,101 @@ export default function AdvancedAnalytics() {
 
   useEffect(() => {
     loadAnalyticsData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRange]);
 
   const loadAnalyticsData = async () => {
     try {
       setLoading(true);
-      // Simulated data - în producție ar fi API call
-      const mockData: AnalyticsData = {
+      
+      // Fetch data from multiple endpoints in parallel
+      const [financialData, socialData, videoData] = await Promise.all([
+        getFinancialBreakdown(timeRange),
+        getSocialFollowers(),
+        getVideoAnalytics()
+      ]);
+
+      // Build analytics data from API responses with fallbacks
+      const analyticsData: AnalyticsData = {
         overview: {
-          totalLeads: 1247,
-          conversionRate: 23.4,
-          avgResponseTime: 2.3,
-          revenue: 45670,
-          socialEngagement: 15.8,
-          videoViews: 89234
+          totalLeads: 0, // TODO: Add leads endpoint
+          conversionRate: 0,
+          avgResponseTime: 0,
+          revenue: financialData.total_revenue || 0,
+          socialEngagement: calculateOverallEngagement(socialData),
+          videoViews: videoData.total_views || 0
         },
         leads: {
-          daily: [
-            { date: '2025-01-01', leads: 45, conversions: 12 },
-            { date: '2025-01-02', leads: 52, conversions: 15 },
-            { date: '2025-01-03', leads: 38, conversions: 9 },
-            { date: '2025-01-04', leads: 61, conversions: 18 },
-            { date: '2025-01-05', leads: 47, conversions: 13 },
-            { date: '2025-01-06', leads: 55, conversions: 16 },
-            { date: '2025-01-07', leads: 43, conversions: 11 }
-          ],
-          sources: [
-            { source: 'Website', count: 456, percentage: 36.6 },
-            { source: 'Social Media', count: 312, percentage: 25.0 },
-            { source: 'Referrals', count: 234, percentage: 18.8 },
-            { source: 'Google Ads', count: 189, percentage: 15.2 },
-            { source: 'Other', count: 56, percentage: 4.5 }
-          ],
-          status: [
-            { status: 'New', count: 234, color: '#8884d8' },
-            { status: 'Contacted', count: 189, color: '#82ca9d' },
-            { status: 'In Progress', count: 156, color: '#ffc658' },
-            { status: 'Completed', count: 123, color: '#00ff00' },
-            { status: 'Rejected', count: 45, color: '#ff7300' }
-          ]
+          daily: [],
+          sources: [],
+          status: []
         },
         social: {
-          platforms: [
-            { platform: 'TikTok', followers: 15420, engagement: 12.5, posts: 89 },
-            { platform: 'Instagram', followers: 8930, engagement: 8.3, posts: 67 },
-            { platform: 'Facebook', followers: 5670, engagement: 6.1, posts: 45 }
-          ],
-          engagement: [
-            { date: '2025-01-01', likes: 234, shares: 45, comments: 67 },
-            { date: '2025-01-02', likes: 289, shares: 52, comments: 78 },
-            { date: '2025-01-03', likes: 198, shares: 38, comments: 54 },
-            { date: '2025-01-04', likes: 345, shares: 67, comments: 89 },
-            { date: '2025-01-05', likes: 267, shares: 48, comments: 71 },
-            { date: '2025-01-06', likes: 312, shares: 59, comments: 82 },
-            { date: '2025-01-07', likes: 278, shares: 51, comments: 75 }
-          ],
-          topPosts: [
-            { id: '1', content: 'Cum să faci cerere de despăgubire...', engagement: 2345, platform: 'TikTok' },
-            { id: '2', content: 'Drepturile tale ca șofer în caz de accident', engagement: 1876, platform: 'Instagram' },
-            { id: '3', content: '5 pași pentru a-ți recupera daunele', engagement: 1567, platform: 'Facebook' }
-          ]
+          platforms: Object.entries(socialData.by_platform || {}).map(([platform, data]) => ({
+            platform,
+            followers: data.followers || 0,
+            engagement: data.engagement_rate || 0,
+            posts: data.posts_count || 0
+          })),
+          engagement: [],
+          topPosts: []
         },
         financial: {
-          revenue: [
-            { month: 'Ian', revenue: 12000, costs: 8000, profit: 4000 },
-            { month: 'Feb', revenue: 15000, costs: 9500, profit: 5500 },
-            { month: 'Mar', revenue: 18000, costs: 11000, profit: 7000 },
-            { month: 'Apr', revenue: 16000, costs: 10000, profit: 6000 },
-            { month: 'Mai', revenue: 22000, costs: 13000, profit: 9000 },
-            { month: 'Iun', revenue: 25000, costs: 14000, profit: 11000 }
-          ],
-          categories: [
-            { category: 'Consultanță', amount: 25000, percentage: 45.2, color: '#8884d8' },
-            { category: 'Expertize', amount: 18000, percentage: 32.5, color: '#82ca9d' },
-            { category: 'Reprezentare', amount: 12000, percentage: 21.7, color: '#ffc658' },
-            { category: 'Altele', amount: 670, percentage: 1.2, color: '#ff7300' }
-          ]
+          revenue: (financialData.timeline || []).map(point => ({
+            month: new Date(point.date).toLocaleDateString('ro-RO', { month: 'short' }),
+            revenue: point.revenue,
+            costs: point.costs,
+            profit: point.profit
+          })),
+          categories: Object.entries(financialData.costs?.by_category || {}).map(([category, amount], idx) => ({
+            category,
+            amount: amount as number,
+            percentage: financialData.costs?.total ? ((amount as number) / financialData.costs.total) * 100 : 0,
+            color: COLORS[idx % COLORS.length]
+          }))
         },
         video: {
-          performance: [
-            { date: '2025-01-01', views: 1234, completionRate: 78 },
-            { date: '2025-01-02', views: 1456, completionRate: 82 },
-            { date: '2025-01-03', views: 987, completionRate: 74 },
-            { date: '2025-01-04', views: 1678, completionRate: 85 },
-            { date: '2025-01-05', views: 1345, completionRate: 79 },
-            { date: '2025-01-06', views: 1567, completionRate: 83 },
-            { date: '2025-01-07', views: 1423, completionRate: 81 }
-          ],
-          topics: [
-            { topic: 'Accidente Auto', views: 45670, engagement: 12.3 },
-            { topic: 'Drepturi Șofer', views: 32150, engagement: 10.8 },
-            { topic: 'Despăgubiri', views: 28930, engagement: 9.5 },
-            { topic: 'Asigurări', views: 23450, engagement: 8.7 },
-            { topic: 'Proceduri', views: 19870, engagement: 7.2 }
-          ]
+          performance: (videoData.top_performing || []).map(video => ({
+            date: video.created_at,
+            views: video.views,
+            completionRate: video.completion_rate || 0
+          })),
+          topics: Object.entries(videoData.by_topic || {}).map(([topic, stats]) => ({
+            topic,
+            views: (stats as { views?: number; engagement?: number }).views || 0,
+            engagement: (stats as { views?: number; engagement?: number }).engagement || 0
+          }))
         }
       };
-      setData(mockData);
+
+      setData(analyticsData);
     } catch (error) {
       console.error('Failed to load analytics data:', error);
       toast({
         title: "Eroare",
-        description: "Nu s-au putut încărca datele de analiză.",
+        description: handleApiError(error),
         variant: "destructive",
+      });
+      
+      // Set empty data structure on error
+      setData({
+        overview: { totalLeads: 0, conversionRate: 0, avgResponseTime: 0, revenue: 0, socialEngagement: 0, videoViews: 0 },
+        leads: { daily: [], sources: [], status: [] },
+        social: { platforms: [], engagement: [], topPosts: [] },
+        financial: { revenue: [], categories: [] },
+        video: { performance: [], topics: [] }
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateOverallEngagement = (socialData: { by_platform?: Record<string, { engagement_rate?: number }> }): number => {
+    if (!socialData.by_platform) return 0;
+    const platforms = Object.values(socialData.by_platform);
+    if (platforms.length === 0) return 0;
+    const total = platforms.reduce((sum, p) => sum + (p.engagement_rate || 0), 0);
+    return total / platforms.length;
   };
 
   const formatNumber = (num: number) => {
