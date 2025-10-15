@@ -1,0 +1,48 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "url": "https://mcp.supabase.com/mcp?project_ref=orctxxpyiqzbordibqxi",
+      "headers": {},
+      "description": "Supabase MCP Server - Direct database access"
+    },
+    "autopro-orchestrator": {
+      "command": "node",
+      "args": [
+        "c:\\Users\\JJ\\Desktop\\autoprodaune-1.5\\mcp-orchestrator\\dist\\index.js"
+      ],
+      "env": {
+        "NODE_ENV": "production"
+      },
+      "description": "AutoPro Master Orchestrator - Coordinates all agents, creates Linear tasks, GitHub issues, generates prompts"
+    }
+  },
+  "mcpServersInfo": {
+    "note": "Copy this entire file content to c:\\Users\\JJ\\.cursor\\mcp.json",
+    "autopro-orchestrator-tools": [
+      "orchestrate_workflow - MAIN TOOL: Orchestrate entire workflows",
+      "linear_create_epic - Create Linear epic",
+      "linear_create_task - Create Linear task",
+      "linear_update_task - Update task status",
+      "linear_list_tasks - List Linear tasks",
+      "github_create_issue - Create GitHub issue",
+      "github_create_pr - Create pull request",
+      "github_commit - Create git commit",
+      "supabase_query - Query Supabase database",
+      "supabase_verify_fix - Verify database changes",
+      "agent_dispatch - Dispatch task to agent",
+      "agent_get_status - Get agent status",
+      "browser_test - Run Playwright E2E test",
+      "api_test - Test API endpoint",
+      "generate_report - Generate comprehensive report",
+      "system_health_check - Check system health",
+      "analyze_codebase - Analyze code"
+    ],
+    "setup": {
+      "step1": "Edit mcp-orchestrator/.env with your API keys",
+      "step2": "Copy this file content to c:\\Users\\JJ\\.cursor\\mcp.json",
+      "step3": "Restart Cursor",
+      "step4": "Test with: 'Use system_health_check tool'",
+      "step5": "Orchestrate with: 'Use orchestrate_workflow tool with command FIX AND TEST ALL'"
+    }
+  }
+}

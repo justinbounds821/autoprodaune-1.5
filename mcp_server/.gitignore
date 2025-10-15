@@ -1,0 +1,9 @@
+# venv and env
+.venv/
+.env
+
+# caches and data
+__pycache__/
+*.pyc
+data/*.json
+
