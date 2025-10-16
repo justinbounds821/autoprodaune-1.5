@@ -1,0 +1,42 @@
+{
+  "name": "autopro-mcp-orchestrator",
+  "version": "1.0.0",
+  "description": "FastMCP Master Orchestration Server for AutoPro Daune multi-agent coordination",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "node dist/index.js test",
+    "http-bridge": "node dist/http-bridge.js",
+    "http-bridge:dev": "tsx watch src/http-bridge.ts",
+    "build:bridge": "tsc src/http-bridge.ts --outDir dist --module ES2022 --target ES2022 --esModuleInterop --skipLibCheck --resolveJsonModule --moduleResolution node"
+  },
+  "keywords": [
+    "mcp",
+    "orchestration",
+    "agents",
+    "linear",
+    "github"
+  ],
+  "author": "AutoPro Daune",
+  "license": "MIT",
+  "dependencies": {
+    "@linear/sdk": "^8.0.0",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@octokit/rest": "^20.0.2",
+    "@supabase/supabase-js": "^2.39.3",
+    "dotenv": "^16.4.1",
+    "express": "^5.1.0",
+    "openai": "^4.28.0",
+    "playwright": "^1.41.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^20.11.5",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
