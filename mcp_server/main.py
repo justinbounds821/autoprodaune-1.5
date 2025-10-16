@@ -577,7 +577,7 @@ async def startup_event():
     print("=" * 60)
     print(f"📦 Version: 0.2.0")
     print(f"🌐 Port: {get_settings().server_port}")
-    print(f"📡 Orchestrator: {get_settings().orchestrator_index_path}")
+    print(f"📡 Orchestrator: {get_settings().orchestrator_url}")
     print("=" * 60)
 
     # Check orchestrator connection
