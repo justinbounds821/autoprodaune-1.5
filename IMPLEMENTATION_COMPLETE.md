@@ -63,7 +63,9 @@ workspace/
 
 **Funcționalitate**: Expune toate tool-urile MCP via REST API pentru comunicare cu mcp_server
 
-#### Cod Complet - Header și Setup
+#### 1.1. Header și Setup
+
+**Descriere**: Imports, inițializare Express, configurare client factories
 
 ```typescript
 #!/usr/bin/env node
@@ -101,7 +103,16 @@ const getSupabaseClient = () => {
 };
 ```
 
-#### Workflow Orchestration
+#### 1.2. Workflow Orchestration
+
+**Descriere**: Funcția principală pentru orchestrarea workflow-urilor complete
+
+**Features**:
+- Creează Linear epic
+- Creează tasks în Linear
+- Creează GitHub issues linkate
+- Generează agent prompts
+- Returnează rezultat structurat
 
 ```typescript
 async function orchestrateWorkflow(payload: any) {
@@ -222,7 +233,14 @@ async function orchestrateWorkflow(payload: any) {
 }
 ```
 
-#### Linear Integration
+#### 1.3. Linear Integration
+
+**Descriere**: Funcții pentru integrare completă cu Linear API
+
+**Funcții implementate**:
+- `linearCreateTask` - Creează task în Linear
+- `linearUpdateTask` - Actualizează status și adaugă comentarii
+- `linearListTasks` - Listează tasks cu filtre
 
 ```typescript
 async function linearCreateTask(payload: any) {
@@ -301,7 +319,13 @@ async function linearListTasks(payload: any) {
 }
 ```
 
-#### GitHub Integration
+#### 1.4. GitHub Integration
+
+**Descriere**: Funcții pentru integrare cu GitHub API și Git local
+
+**Funcții implementate**:
+- `githubCreateIssue` - Creează GitHub issue cu Octokit
+- `githubCommit` - Creează commit Git cu linking către Linear/GitHub
 
 ```typescript
 async function githubCreateIssue(payload: any) {
@@ -362,7 +386,15 @@ async function githubCommit(payload: any) {
 }
 ```
 
-#### Supabase Integration
+#### 1.5. Supabase Integration
+
+**Descriere**: Funcții pentru operații database via Supabase
+
+**Operații suportate**:
+- `select` - Query cu filtre
+- `insert` - Insert date
+- `update` - Update cu filtre
+- `delete` - Delete cu filtre
 
 ```typescript
 async function supabaseQuery(payload: any) {
@@ -422,7 +454,16 @@ async function supabaseQuery(payload: any) {
 }
 ```
 
-#### Browser Testing
+#### 1.6. Browser Testing
+
+**Descriere**: E2E testing cu Playwright
+
+**Acțiuni suportate**:
+- `goto` - Navigare la URL
+- `click` - Click pe selector
+- `fill` - Completare input
+- `wait` - Așteptare selector/timeout
+- `assert` - Verificare text în element
 
 ```typescript
 async function browserTest(payload: any) {
@@ -488,7 +529,17 @@ async function browserTest(payload: any) {
 }
 ```
 
-#### Main Router
+#### 1.7. Main Router
+
+**Descriere**: Endpoint principal pentru toate tool-urile MCP
+
+**Tool-uri expuse**:
+- `orchestrate_workflow`
+- `linear_create_task`, `linear_update_task`, `linear_list_tasks`
+- `github_create_issue`, `github_commit`
+- `supabase_query`, `supabase_verify_fix`
+- `browser_test`, `api_test`
+- `system_health_check`
 
 ```typescript
 app.post('/mcp/orchestrator/call', async (req: Request, res: Response) => {
@@ -565,7 +616,14 @@ app.listen(PORT, () => {
 
 **Dimensiune**: ~640 linii | **Limbaj**: Python | **Framework**: FastAPI
 
-#### Imports și Setup
+#### 2.1. Imports și Setup
+
+**Descriere**: Imports, inițializare FastAPI, configurare middleware
+
+**Middleware-uri adăugate**:
+- `CORSMiddleware` - CORS support
+- `RequestLoggingMiddleware` - Request logging cu timing
+- `OrchestratorHealthMiddleware` - Health monitoring
 
 ```python
 from __future__ import annotations
@@ -607,7 +665,17 @@ app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(OrchestratorHealthMiddleware)
 ```
 
-#### Models
+#### 2.2. Pydantic Models
+
+**Descriere**: Models pentru validare request/response
+
+**Models create**:
+- `ExecuteRequest/Response` - Task execution
+- `OrchestrateWorkflowRequest` - Workflow orchestration
+- `LinearTaskRequest` - Linear tasks
+- `GitHubIssueRequest` - GitHub issues
+- `SupabaseQueryRequest` - Database queries
+- `BrowserTestRequest` - Browser tests
 
 ```python
 class ExecuteRequest(BaseModel):
@@ -653,7 +721,15 @@ class BrowserTestRequest(BaseModel):
     verify_in_db: Optional[Dict[str, Any]] = None
 ```
 
-#### OpenAPI Customization
+#### 2.3. OpenAPI Customization
+
+**Descriere**: Customizare OpenAPI schema pentru GPT compatibility
+
+**Adăugări**:
+- Metadata GPT integration
+- Enhanced descriptions
+- GPT-specific tags
+- Custom tool documentation
 
 ```python
 def custom_openapi():
@@ -679,7 +755,15 @@ def custom_openapi():
 app.openapi = custom_openapi
 ```
 
-#### Endpoints - Health & Status
+#### 2.4. Endpoints - Health & Status
+
+**Descriere**: Health check și system status
+
+**Returnează**:
+- Service status
+- Orchestrator connection status
+- Environment info
+- Version
 
 ```python
 @app.get("/health")
@@ -698,7 +782,16 @@ def health() -> Dict[str, Any]:
     }
 ```
 
-#### Endpoints - Workflow Orchestration
+#### 2.5. Endpoints - Workflow Orchestration
+
+**Descriere**: Endpoint principal pentru orchestrare complexă
+
+**Input**:
+- `command` - High-level command
+- `context` - Project context
+- `options` - Orchestration options
+
+**Output**: Workflow result cu tasks, prompts, metrics
 
 ```python
 @app.post("/mcp/workflows/orchestrate")
@@ -719,7 +812,14 @@ def mcp_orchestrate_workflow(req: OrchestrateWorkflowRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 ```
 
-#### Endpoints - Linear Integration
+#### 2.6. Endpoints - Linear Integration
+
+**Descriere**: Endpoints pentru Linear tasks
+
+**Endpoints**:
+- `POST /mcp/tools/linear/task` - Create task
+- `PUT /mcp/tools/linear/task` - Update task
+- `GET /mcp/tools/linear/tasks` - List tasks
 
 ```python
 @app.post("/mcp/tools/linear/task")
@@ -754,7 +854,21 @@ def mcp_linear_update_task(req: LinearUpdateRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 ```
 
-#### GPT Developer Mode Endpoints
+#### 2.7. GPT Developer Mode Endpoints
+
+**Descriere**: Endpoints optimizate pentru GPT assistants
+
+**Features**:
+- Response formatting optimizat pentru GPT
+- Enhanced error messages
+- Simplified output structure
+- Success/failure clear indicators
+
+**Endpoints speciale**:
+- `POST /mcp/tools/gpt/orchestrate` - Orchestrate workflow
+- `POST /mcp/tools/gpt/create_task` - Create Linear task
+- `POST /mcp/tools/gpt/test` - Run test
+- `GET /mcp/tools/gpt/status` - System status
 
 ```python
 @app.post("/mcp/tools/gpt/orchestrate")
@@ -815,7 +929,14 @@ def gpt_system_status() -> Dict[str, Any]:
         }
 ```
 
-#### Startup Event
+#### 2.8. Startup Event
+
+**Descriere**: Inițializare la pornire
+
+**Verificări**:
+- Print version și port info
+- Test orchestrator connection
+- Log connection status
 
 ```python
 @app.on_event("startup")
@@ -851,6 +972,31 @@ if __name__ == "__main__":
 ### Fișier: `mcp_server/clients/orchestrator_client.py`
 
 **Dimensiune**: ~344 linii | **Limbaj**: Python
+
+#### 3.1. OrchestratorClient Class
+
+**Descriere**: Client HTTP robust pentru comunicare cu orchestrator
+
+**Features**:
+- Session management cu connection pooling
+- Retry strategy (3 retries cu backoff)
+- Timeout configuration
+- Error handling comprehensive
+- Type hints complete
+
+**Metode publice**:
+- `orchestrate_workflow()` - Workflow orchestration
+- `linear_create_task()` - Create Linear task
+- `linear_update_task()` - Update Linear task
+- `linear_list_tasks()` - List Linear tasks
+- `github_create_issue()` - Create GitHub issue
+- `github_commit()` - Create Git commit
+- `supabase_query()` - Database query
+- `supabase_verify_fix()` - Verify fix
+- `browser_test()` - Browser E2E test
+- `api_test()` - API test
+- `system_health_check()` - Health check
+- `ping()` - Quick connectivity check
 
 ```python
 from __future__ import annotations
@@ -1018,6 +1164,27 @@ def get_orchestrator_client() -> OrchestratorClient:
 
 ### Fișier: `mcp_server/middleware.py`
 
+**Dimensiune**: ~62 linii | **Limbaj**: Python
+
+#### 4.1. RequestLoggingMiddleware
+
+**Descriere**: Middleware pentru logging request-uri cu timing
+
+**Features**:
+- Log request method și path
+- Calculează duration
+- Log response status
+- Adaugă header `X-Process-Time`
+
+#### 4.2. OrchestratorHealthMiddleware
+
+**Descriere**: Middleware pentru monitoring orchestrator health
+
+**Features**:
+- Ping orchestrator la fiecare request
+- Adaugă header `X-Orchestrator-Health`
+- Non-blocking (graceful failure)
+
 ```python
 import time
 import logging
@@ -1068,6 +1235,24 @@ class OrchestratorHealthMiddleware(BaseHTTPMiddleware):
 
 ### Fișier: `mcp_server/config.py`
 
+**Dimensiune**: ~71 linii | **Limbaj**: Python
+
+#### 5.1. Settings Management
+
+**Descriere**: Configuration management cu environment variables
+
+**Settings**:
+- Core settings (host, port, environment)
+- Orchestrator connection (URL)
+- Linear credentials (API key, team ID)
+- GitHub credentials (token, repo)
+- Supabase credentials (URL, keys)
+- OpenAI (API key pentru GPT)
+
+**Funcții**:
+- `get_settings()` - Singleton settings instance
+- `repo_root()` - Get repository root path
+
 ```python
 import os
 from pathlib import Path
@@ -1115,6 +1300,26 @@ def repo_root() -> Path:
 ## 📝 Componenta 6: OpenAPI Customization
 
 ### Fișier: `mcp_server/openapi_customization.py`
+
+**Dimensiune**: ~94 linii | **Limbaj**: Python
+
+#### 6.1. OpenAPI Schema Customization
+
+**Descriere**: Customizare OpenAPI pentru GPT Developer Mode
+
+**Modificări aplicate**:
+1. **Metadata GPT** - Adaugă `x-gpt-integration` cu capabilities
+2. **Enhanced Description** - Descriere detaliată cu exemple
+3. **GPT Tag** - Tag special pentru GPT endpoints
+4. **Endpoint Tagging** - Marchează automat GPT endpoints
+
+**Capabilities listate**:
+- workflow_orchestration
+- linear_integration
+- github_integration
+- supabase_integration
+- browser_testing
+- api_testing
 
 ```python
 from typing import Dict, Any
@@ -1186,24 +1391,114 @@ Production-ready MCP server for AutoPro Daune project with full orchestrator int
 
 ## 🚀 Pornire și Testare
 
-### Script de Pornire: `START_SYSTEM.ps1` (220 linii)
+### Script de Pornire: `START_SYSTEM.ps1`
 
-Pornește automat ambele servicii și monitorizează health:
+**Dimensiune**: ~220 linii | **Limbaj**: PowerShell
 
-```powershell
-# Pornește orchestrator pe port 3030
-# Pornește mcp_server pe port 8012
-# Verifică health pentru ambele
-# Monitorizează status continuu
+#### 7.1. Funcționalitate Script Pornire
+
+**Descriere**: Script automat pentru pornire completă sistem
+
+**Pași executați**:
+1. **Start Orchestrator** (port 3030)
+   - Verifică dacă portul e ocupat
+   - Opțional kill process existent
+   - Start background job
+   - Wait for service (max 30s)
+
+2. **Start MCP Server** (port 8012)
+   - Activare venv Python
+   - Verifică port
+   - Start background job
+   - Wait for service
+
+3. **Health Checks**
+   - Test orchestrator `/health`
+   - Test mcp_server `/health`
+   - Verifică orchestrator connection
+
+4. **Monitoring**
+   - Loop continuu cu check-uri
+   - Detectare stop neașteptat
+   - Cleanup la exit (Ctrl+C)
+
+**Output**:
+```
+🚀 Starting AutoPro MCP System
+📡 Step 1: Starting MCP Orchestrator HTTP Bridge
+⏳ Waiting for Orchestrator on port 3030...
+✅ Orchestrator is ready!
+🐍 Step 2: Starting FastAPI MCP Server
+⏳ Waiting for MCP Server on port 8012...
+✅ MCP Server is ready!
+🏥 Step 3: Running Health Checks
+✅ Orchestrator: ok
+✅ MCP Server: ok
+   Orchestrator Connected: True
+✅ System Started Successfully!
 ```
 
-### Script de Testare: `TEST_INTEGRATION.ps1` (150 linii)
+### Script de Testare: `TEST_INTEGRATION.ps1`
 
-Testează:
-- Health checks
-- Comunicare end-to-end
-- GPT endpoints
-- OpenAPI spec
+**Dimensiune**: ~150 linii | **Limbaj**: PowerShell
+
+#### 7.2. Funcționalitate Script Testare
+
+**Descriere**: Suite completă de teste de integrare
+
+**Teste executate**:
+
+1. **Test 1: Orchestrator Health**
+   - Request: `GET http://127.0.0.1:3030/health`
+   - Verifică: status, timestamp
+
+2. **Test 2: MCP Server Health**
+   - Request: `GET http://127.0.0.1:8012/health`
+   - Verifică: status, orchestrator_connected, version
+
+3. **Test 3: System Health (End-to-End)**
+   - Request: `GET http://127.0.0.1:8012/mcp/tools/system/health`
+   - Verifică: overall_status, services (backend, linear, github, supabase)
+   - **Testează comunicarea completă**: mcp_server → orchestrator → servicii
+
+4. **Test 4: OpenAPI Documentation**
+   - Request: `GET http://127.0.0.1:8012/openapi.json`
+   - Verifică: schema validă, număr endpoints, GPT endpoints
+
+5. **Test 5: GPT Status Endpoint**
+   - Request: `GET http://127.0.0.1:8012/mcp/tools/gpt/status`
+   - Verifică: success, overall_status
+
+6. **Test 6: Execute Simple Task**
+   - Request: `POST http://127.0.0.1:8012/mcp/execute`
+   - Verifică: task_id, status
+   - Polling pentru completion
+
+**Output**:
+```
+🧪 MCP System Integration Tests
+
+📡 Test 1: Orchestrator Health
+Testing: Orchestrator /health... ✅
+   Status: ok
+
+🐍 Test 2: MCP Server Health
+Testing: MCP Server /health... ✅
+   Status: ok
+   Orchestrator Connected: True
+   Version: 0.2.0
+
+🏥 Test 3: System Health Check (End-to-End)
+Testing: System health via MCP... ✅
+   Overall Status: healthy
+   Services:
+     - backend: healthy
+     - linear: healthy
+     - github: healthy
+     - supabase: healthy
+
+✅ All Tests Passed!
+```
 
 ---
 
