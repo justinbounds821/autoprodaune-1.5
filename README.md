@@ -107,7 +107,7 @@ autoprodaune-1/
 - 🚧 Real-time dashboard updates
 - 🚧 Advanced charts (Recharts)
 - 🚧 Email/SMS notifications
-- 🚧 File attachments
+- ✅ File attachments & lead assignment workflows
 - 🚧 Conversion funnel
 - 🚧 AI insights
 

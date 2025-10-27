@@ -52,6 +52,50 @@ CREATE TABLE IF NOT EXISTS lead_activities (
 CREATE INDEX IF NOT EXISTS idx_lead_activities_lead_id ON lead_activities(lead_id);
 CREATE INDEX IF NOT EXISTS idx_lead_activities_created_at ON lead_activities(created_at DESC);
 
+-- Lead attachments - physical files uploaded for a lead
+CREATE TABLE IF NOT EXISTS lead_attachments (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    file_name TEXT NOT NULL,
+    file_url TEXT NOT NULL,
+    storage_key TEXT,
+    content_type TEXT,
+    file_size BIGINT,
+    uploaded_by TEXT,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lead_attachments_lead_id ON lead_attachments(lead_id);
+CREATE INDEX IF NOT EXISTS idx_lead_attachments_created_at ON lead_attachments(created_at DESC);
+
+-- Lead status history - conversion funnel tracking
+CREATE TABLE IF NOT EXISTS lead_status_history (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    previous_status TEXT,
+    new_status TEXT NOT NULL,
+    changed_by TEXT,
+    notes TEXT,
+    changed_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lead_status_history_lead_id ON lead_status_history(lead_id);
+CREATE INDEX IF NOT EXISTS idx_lead_status_history_changed_at ON lead_status_history(changed_at DESC);
+
+-- Lead assignments - track ownership changes
+CREATE TABLE IF NOT EXISTS lead_assignments (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    assigned_to TEXT NOT NULL,
+    assigned_to_email TEXT,
+    assigned_by TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lead_assignments_lead_id ON lead_assignments(lead_id);
+
 -- Referrals table - 200 LEI referral system
 CREATE TABLE IF NOT EXISTS referrals (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,

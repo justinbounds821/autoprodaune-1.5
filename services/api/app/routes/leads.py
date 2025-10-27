@@ -7,14 +7,31 @@ This module provides endpoints for lead management including:
 - Lead analytics and filtering
 """
 
+import io
+import logging
+from datetime import datetime
+from uuid import uuid4
+from typing import Dict, Any, List, Optional
+
 from fastapi import APIRouter, HTTPException, Query, Depends, UploadFile, File, Form
 from pydantic import BaseModel, Field, validator
-from typing import Dict, Any, List, Optional
-from datetime import datetime
-import logging
 
 from ..core.database import get_database, DatabaseManager
-from ..core.monitoring import get_monitoring, MonitoringManager, monitor_api_call, monitor_business_operation
+from ..core.monitoring import (
+    get_monitoring,
+    MonitoringManager,
+    monitor_api_call,
+    monitor_business_operation,
+)
+from ..models.leads import (
+    LeadAttachment,
+    LeadAttachmentList,
+    LeadAssignmentRequest,
+    LeadAssignmentResponse,
+    LeadStatusChange,
+    LeadStatusHistoryResponse,
+)
+from ..services.email_service import EmailService, get_email_service
 from ..services.supabase_client import get_supabase_service_instance
 # --- PATCH: import compat pentru rulare din services\api SAU din rădăcină ---
 try:
@@ -148,22 +165,98 @@ async def get_lead(
 
 @router.put("/{lead_id}")
 async def update_lead(
-    lead_id: int,
-    update_data: Dict[str, Any]
+    lead_id: str,
+    update_data: Dict[str, Any],
+    email_service: EmailService = Depends(get_email_service)
 ) -> Dict[str, Any]:
-    """
-    Actualizează un lead existent în Supabase.
-    
-    Args:
-        lead_id: ID-ul lead-ului
-        update_data: Datele de actualizat
-        
-    Returns:
-        Dicționar cu rezultatul operației
-    """
+    """Actualizează un lead existent și salvează istoricul statusului."""
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Nu există câmpuri de actualizat")
+
     try:
-        return get_supabase_service_instance().lead_update(lead_id, update_data)
-        
+        supabase = get_supabase_service_instance()
+
+        existing = supabase._table_select(
+            "leads",
+            "*",
+            filters=[("eq", "id", lead_id)]
+        )
+
+        if not existing:
+            raise HTTPException(status_code=404, detail=f"Lead {lead_id} nu a fost găsit")
+
+        original_lead = existing[0]
+        previous_status = original_lead.get("status")
+        new_status = update_data.get("status")
+
+        payload = update_data.copy()
+        payload["updated_at"] = datetime.utcnow().isoformat()
+
+        # Mark conversion timestamp when applicable
+        if new_status and new_status != previous_status and new_status in {"converted", "completed"}:
+            payload.setdefault("converted_at", datetime.utcnow().isoformat())
+
+        updated_rows = supabase._table_update(
+            "leads",
+            payload,
+            filters=[("eq", "id", lead_id)]
+        )
+
+        updated_lead = updated_rows[0] if updated_rows else {**original_lead, **payload}
+
+        # Track status conversion history
+        if new_status and new_status != previous_status:
+            history_payload = {
+                "lead_id": lead_id,
+                "previous_status": previous_status,
+                "new_status": new_status,
+                "changed_by": update_data.get("updated_by") or "system",
+                "notes": update_data.get("notes"),
+                "changed_at": datetime.utcnow().isoformat(),
+            }
+            supabase._table_insert("lead_status_history", history_payload)
+
+            supabase._table_insert(
+                "lead_activities",
+                {
+                    "lead_id": lead_id,
+                    "activity_type": "status_change",
+                    "title": f"Status actualizat la {new_status}",
+                    "description": update_data.get("notes") or "Status actualizat din UI",
+                    "performed_by": update_data.get("updated_by") or "system",
+                    "metadata": {
+                        "previous_status": previous_status,
+                        "new_status": new_status,
+                    },
+                    "created_at": datetime.utcnow().isoformat(),
+                },
+            )
+
+            assignment_records = supabase._table_select(
+                "lead_assignments",
+                "*",
+                filters=[("eq", "lead_id", lead_id)],
+                order=("created_at", True),
+            )
+            assignment_email = assignment_records[0].get("assigned_to_email") if assignment_records else None
+
+            await email_service.send_status_change_notification(
+                lead_name=updated_lead.get("name"),
+                lead_id=lead_id,
+                previous_status=previous_status,
+                new_status=new_status,
+                recipients=[email for email in [updated_lead.get("email"), assignment_email] if email],
+            )
+
+        return {
+            "success": True,
+            "message": "Lead actualizat cu succes",
+            "data": updated_lead,
+        }
+
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Eroare la actualizarea lead-ului {lead_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Eroare la actualizarea lead-ului: {str(e)}")
@@ -705,72 +798,276 @@ async def get_lead_timeline(
 
 # ==================== FILE ATTACHMENTS ====================
 
-@router.post("/upload-attachment")
+@router.post("/{lead_id}/attachments", response_model=LeadAttachment)
 async def upload_lead_attachment(
+    lead_id: str,
     file: UploadFile = File(...),
-    lead_id: str = Form(...)
-) -> Dict[str, Any]:
-    """
-    Upload file attachment for a lead.
-    
-    Args:
-        file: File to upload
-        lead_id: Lead ID
-        
-    Returns:
-        File URL and metadata
-    """
+    uploaded_by: str = Form("system"),
+    notify_emails: Optional[str] = Form(None),
+    email_service: EmailService = Depends(get_email_service)
+) -> LeadAttachment:
+    """Upload file attachment for a lead and notify relevant users."""
+
     try:
         supabase = get_supabase_service_instance()
-        
-        # Validate lead exists
-        lead = supabase._table_select("leads", "*", [("eq", "id", lead_id)])
-        if not lead or len(lead) == 0:
+
+        lead_records = supabase._table_select("leads", "*", [("eq", "id", lead_id)])
+        if not lead_records:
             raise HTTPException(status_code=404, detail="Lead not found")
-        
-        # Validate file
-        max_size = 10 * 1024 * 1024  # 10MB
+
+        lead = lead_records[0]
+
         file_content = await file.read()
+        if not file_content:
+            raise HTTPException(status_code=400, detail="Fișierul este gol")
+
+        max_size = 10 * 1024 * 1024  # 10MB
         if len(file_content) > max_size:
-            raise HTTPException(status_code=400, detail="File too large (max 10MB)")
-        
-        # Upload to Supabase Storage
-        file_key = f"leads/{lead_id}/{datetime.now().timestamp()}_{file.filename}"
+            raise HTTPException(status_code=400, detail="Fișier prea mare (max 10MB)")
+
+        storage_key = f"leads/{lead_id}/{uuid4()}_{file.filename}"
+        buffer = io.BytesIO(file_content)
+        buffer.seek(0)
         file_url = upload_file(
-            bucket_name="lead-attachments",
-            file_key=file_key,
-            file_content=file_content,
-            content_type=file.content_type
+            buffer,
+            storage_key,
+            file.content_type or "application/octet-stream",
         )
-        
-        # Update lead files array
-        current_files = lead[0].get("files", []) or []
-        if not isinstance(current_files, list):
-            current_files = []
-        
-        current_files.append(file_url)
-        
-        supabase._table_update_eq(
-            "leads",
-            "id",
-            lead_id,
-            {"files": current_files}
-        )
-        
-        logger.info(f"[LeadAttachment] Uploaded file for lead {lead_id}: {file_url}")
-        
-        return {
-            "success": True,
+
+        attachment_payload = {
+            "lead_id": lead_id,
+            "file_name": file.filename,
             "file_url": file_url,
-            "filename": file.filename,
-            "size": len(file_content)
+            "storage_key": storage_key,
+            "content_type": file.content_type,
+            "file_size": len(file_content),
+            "uploaded_by": uploaded_by,
+            "metadata": {},
+            "created_at": datetime.utcnow().isoformat(),
         }
-        
+
+        attachment_record = supabase._table_insert("lead_attachments", attachment_payload)
+
+        existing_files = lead.get("files") or []
+        if not isinstance(existing_files, list):
+            existing_files = []
+        if file_url not in existing_files:
+            existing_files.append(file_url)
+
+        supabase._table_update(
+            "leads",
+            {
+                "files": existing_files,
+                "updated_at": datetime.utcnow().isoformat(),
+            },
+            filters=[("eq", "id", lead_id)],
+        )
+
+        supabase._table_insert(
+            "lead_activities",
+            {
+                "lead_id": lead_id,
+                "activity_type": "attachment",
+                "title": f"Fișier încărcat: {file.filename}",
+                "description": f"Atașament încărcat de {uploaded_by}",
+                "performed_by": uploaded_by,
+                "metadata": {
+                    "file_url": file_url,
+                    "file_name": file.filename,
+                },
+                "created_at": datetime.utcnow().isoformat(),
+            },
+        )
+
+        recipients = []
+        if notify_emails:
+            recipients.extend([
+                email.strip()
+                for email in notify_emails.split(",")
+                if email.strip()
+            ])
+
+        assignment_records = supabase._table_select(
+            "lead_assignments",
+            "*",
+            filters=[("eq", "lead_id", lead_id)],
+            order=("created_at", True),
+        )
+        if assignment_records:
+            assignment_email = assignment_records[0].get("assigned_to_email")
+            if assignment_email:
+                recipients.append(assignment_email)
+
+        if lead.get("email"):
+            recipients.append(lead.get("email"))
+
+        recipients = list(dict.fromkeys(recipients))
+
+        await email_service.send_attachment_notification(
+            lead_name=lead.get("name"),
+            lead_id=lead_id,
+            file_name=file.filename,
+            recipients=recipients,
+        )
+
+        logger.info("[LeadAttachment] Uploaded file for lead %s", lead_id)
+
+        return LeadAttachment(**attachment_record)
+
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"[LeadAttachment] Upload error: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload attachment: {str(e)}")
+    except Exception as exc:
+        logger.error(f"[LeadAttachment] Upload error: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload attachment: {exc}")
+
+
+@router.get("/{lead_id}/attachments", response_model=LeadAttachmentList)
+async def list_lead_attachments(lead_id: str) -> LeadAttachmentList:
+    """Return the attachment metadata for a given lead."""
+
+    try:
+        supabase = get_supabase_service_instance()
+        attachments = supabase._table_select(
+            "lead_attachments",
+            "*",
+            filters=[("eq", "lead_id", lead_id)],
+            order=("created_at", True),
+        )
+
+        items = [LeadAttachment(**attachment) for attachment in attachments or []]
+        return LeadAttachmentList(lead_id=lead_id, items=items)
+
+    except Exception as exc:
+        logger.error(f"[LeadAttachment] List error for lead {lead_id}: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch attachments: {exc}")
+
+
+@router.get("/attachments/{attachment_id}", response_model=LeadAttachment)
+async def get_attachment_metadata(attachment_id: str) -> LeadAttachment:
+    """Return metadata for a specific attachment."""
+
+    supabase = get_supabase_service_instance()
+    attachment = supabase._table_select(
+        "lead_attachments",
+        "*",
+        filters=[("eq", "id", attachment_id)],
+    )
+
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    return LeadAttachment(**attachment[0])
+
+
+@router.get("/attachments/{attachment_id}/download")
+async def download_attachment(attachment_id: str) -> Dict[str, Any]:
+    """Return a direct URL to download the attachment."""
+
+    metadata = await get_attachment_metadata(attachment_id)
+    return {
+        "success": True,
+        "file_url": metadata.file_url,
+        "file_name": metadata.file_name,
+        "content_type": metadata.content_type,
+    }
+
+
+# ==================== LEAD ASSIGNMENT ====================
+
+@router.post("/{lead_id}/assign", response_model=LeadAssignmentResponse)
+async def assign_lead(
+    lead_id: str,
+    assignment: LeadAssignmentRequest,
+    email_service: EmailService = Depends(get_email_service)
+) -> LeadAssignmentResponse:
+    """Assign a lead to an operator and notify them."""
+
+    try:
+        supabase = get_supabase_service_instance()
+        lead_records = supabase._table_select("leads", "*", [("eq", "id", lead_id)])
+        if not lead_records:
+            raise HTTPException(status_code=404, detail="Lead not found")
+
+        supabase._table_update(
+            "leads",
+            {
+                "assigned_to": assignment.assigned_to,
+                "updated_at": datetime.utcnow().isoformat(),
+            },
+            filters=[("eq", "id", lead_id)],
+        )
+
+        assignment_record = supabase._table_insert(
+            "lead_assignments",
+            {
+                "lead_id": lead_id,
+                "assigned_to": assignment.assigned_to,
+                "assigned_to_email": assignment.assigned_to_email,
+                "assigned_by": assignment.assigned_by,
+                "notes": assignment.notes,
+                "created_at": datetime.utcnow().isoformat(),
+            },
+        )
+
+        supabase._table_insert(
+            "lead_activities",
+            {
+                "lead_id": lead_id,
+                "activity_type": "assignment",
+                "title": f"Lead asignat către {assignment.assigned_to}",
+                "description": assignment.notes or "Lead asignat din UI",
+                "performed_by": assignment.assigned_by or "system",
+                "metadata": assignment_record,
+                "created_at": datetime.utcnow().isoformat(),
+            },
+        )
+
+        lead = lead_records[0]
+        await email_service.send_assignment_notification(
+            lead_name=lead.get("name"),
+            lead_id=lead_id,
+            assigned_to=assignment.assigned_to,
+            assignee_email=assignment.assigned_to_email,
+            assigned_by=assignment.assigned_by,
+            notes=assignment.notes,
+        )
+
+        return LeadAssignmentResponse(
+            success=True,
+            lead_id=lead_id,
+            assigned_to=assignment.assigned_to,
+            assigned_by=assignment.assigned_by,
+            notes=assignment.notes,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"[LeadAssignment] Error assigning lead {lead_id}: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to assign lead: {exc}")
+
+
+# ==================== STATUS HISTORY ====================
+
+@router.get("/{lead_id}/status-history", response_model=LeadStatusHistoryResponse)
+async def get_lead_status_history(lead_id: str) -> LeadStatusHistoryResponse:
+    """Return the conversion history for a lead."""
+
+    try:
+        supabase = get_supabase_service_instance()
+        history_rows = supabase._table_select(
+            "lead_status_history",
+            "*",
+            filters=[("eq", "lead_id", lead_id)],
+            order=("changed_at", True),
+        )
+
+        items = [LeadStatusChange(**row) for row in history_rows or []]
+        return LeadStatusHistoryResponse(lead_id=lead_id, items=items)
+
+    except Exception as exc:
+        logger.error(f"[LeadStatusHistory] Error retrieving history for {lead_id}: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch status history: {exc}")
 
 
 # ==================== EMAIL INTEGRATION ====================

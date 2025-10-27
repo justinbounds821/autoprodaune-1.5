@@ -4,11 +4,14 @@ Pytest configuration and shared fixtures for AutoPro Daune API tests.
 
 import asyncio
 import os
-from typing import AsyncGenerator, Generator
+from typing import Any, AsyncGenerator, Generator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import pytest_asyncio
+try:  # pragma: no cover - optional dependency for async fixtures
+    import pytest_asyncio
+except ImportError:  # pragma: no cover
+    pytest_asyncio = None
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
@@ -60,6 +63,12 @@ def mock_supabase():
         count=1
     )
 
+    mock_client._table_select = MagicMock(
+        return_value=[{"id": "test-id", "name": "Test Lead", "email": "lead@example.com"}]
+    )
+    mock_client._table_update = MagicMock(return_value=[{"id": "test-id"}])
+    mock_client._table_insert = MagicMock(return_value={"id": "new-id"})
+
     return mock_client
 
 
@@ -97,35 +106,83 @@ def client(test_settings, mock_supabase, mock_redis, mock_whatsapp) -> TestClien
     def override_get_whatsapp():
         return mock_whatsapp
 
+    from app.routes import leads as leads_routes
+
+    original_supabase_instance = leads_routes.get_supabase_service_instance
+    leads_routes.get_supabase_service_instance = override_get_supabase
+
+    class DummyEmailService:
+        async def send_assignment_notification(self, **_: Any) -> bool:
+            return True
+
+        async def send_status_change_notification(self, **_: Any) -> bool:
+            return True
+
+        async def send_attachment_notification(self, **_: Any) -> bool:
+            return True
+
+    original_email_service = leads_routes.get_email_service
+    leads_routes.get_email_service = lambda: DummyEmailService()
+
     app.dependency_overrides[get_supabase] = override_get_supabase
     app.dependency_overrides[get_redis] = override_get_redis
 
     with TestClient(app) as test_client:
         yield test_client
 
+    leads_routes.get_supabase_service_instance = original_supabase_instance
+    leads_routes.get_email_service = original_email_service
     app.dependency_overrides.clear()
 
 
-@pytest_asyncio.fixture
-async def async_client(test_settings, mock_supabase, mock_redis, mock_whatsapp) -> AsyncGenerator[AsyncClient, None]:
-    """Create async test client with mocked dependencies."""
+if pytest_asyncio:
 
-    def override_get_supabase():
-        return mock_supabase
+    @pytest_asyncio.fixture
+    async def async_client(test_settings, mock_supabase, mock_redis, mock_whatsapp) -> AsyncGenerator[AsyncClient, None]:
+        """Create async test client with mocked dependencies."""
 
-    def override_get_redis():
-        return mock_redis
+        def override_get_supabase():
+            return mock_supabase
 
-    def override_get_whatsapp():
-        return mock_whatsapp
+        def override_get_redis():
+            return mock_redis
 
-    app.dependency_overrides[get_supabase] = override_get_supabase
-    app.dependency_overrides[get_redis] = override_get_redis
+        def override_get_whatsapp():
+            return mock_whatsapp
 
-    async with AsyncClient(app=app, base_url="http://testserver") as ac:
-        yield ac
+        from app.routes import leads as leads_routes
 
-    app.dependency_overrides.clear()
+        original_supabase_instance = leads_routes.get_supabase_service_instance
+        leads_routes.get_supabase_service_instance = override_get_supabase
+
+        class DummyEmailService:
+            async def send_assignment_notification(self, **_: Any) -> bool:
+                return True
+
+            async def send_status_change_notification(self, **_: Any) -> bool:
+                return True
+
+            async def send_attachment_notification(self, **_: Any) -> bool:
+                return True
+
+        original_email_service = leads_routes.get_email_service
+        leads_routes.get_email_service = lambda: DummyEmailService()
+
+        app.dependency_overrides[get_supabase] = override_get_supabase
+        app.dependency_overrides[get_redis] = override_get_redis
+
+        async with AsyncClient(app=app, base_url="http://testserver") as ac:
+            yield ac
+
+        leads_routes.get_supabase_service_instance = original_supabase_instance
+        leads_routes.get_email_service = original_email_service
+        app.dependency_overrides.clear()
+
+else:  # pragma: no cover - executed only when pytest-asyncio is missing
+
+    @pytest.fixture
+    def async_client():
+        pytest.skip("pytest-asyncio is required for async client fixtures")
 
 
 @pytest.fixture
