@@ -1,8 +1,9 @@
 # 🚀 AutoPro Daune - Lead Generation & Automation System
 
-**Status:** ✅ PRODUCTION READY (93% Complete)  
-**Version:** 2.0.0  
-**Last Update:** 1 Octombrie 2025
+**Status:** ✅ PRODUCTION READY - Refactorizare Corectă În Curs  
+**Version:** 3.0.0 (Refactoring)  
+**Last Update:** 28 Octombrie 2025  
+**Architecture:** Microservicii din cod existent (backwards compatible)
 
 ---
 
@@ -28,44 +29,49 @@
 
 ## 🚀 QUICK START
 
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- Supabase account
+### ⚡ REFACTORIZARE CORECTĂ (Folosind cod existent)
 
-### Start Complete System (One Command)
-```powershell
-.\scripts\start-full-system.ps1
+**Arhitectură microservicii DIN codul existent - backwards compatible!**
+
+```bash
+# Start toate serviciile (hybrid)
+docker-compose up -d
+
+# SAU doar API original (backwards compatible)
+docker-compose up -d api frontend redis
+
+# SAU doar microservicii
+docker-compose up -d core-api video-service frontend redis
 ```
 
-### Start Local (Basic)
-```powershell
-.\scripts\start-all.ps1
-```
+**Read the guide:** [START_REFACTORIZARE_CORECTĂ.md](START_REFACTORIZARE_CORECTĂ.md)
 
-### Manual Start
-```powershell
-# Backend
-.\scripts\start-backend.ps1
-
-# Frontend (in new terminal)
-.\scripts\start-frontend.ps1
-```
-
-### Health Check
-```powershell
-.\scripts\health-check.ps1
-```
-
-### Production Build
-```powershell
-.\scripts\build-production.ps1
-```
+**Architecture docs:** [REFACTORIZARE_CORECTĂ_3.0.md](REFACTORIZARE_CORECTĂ_3.0.md)
 
 ### Access Points
 - 🌐 **Frontend:** http://localhost:3003
+- 🔌 **API Original (toate routerele):** http://localhost:8001
+- 💼 **Core API Microservice:** http://localhost:8002
+- 🎬 **Video Service Microservice:** http://localhost:8003
+
+---
+
+### 🏛️ MONOLITH (Legacy)
+
+**Old architecture (still works but not recommended for production):**
+
+```powershell
+# Start legacy monolith
+.\scripts\start-all.ps1
+
+# Or manually:
+.\scripts\start-backend.ps1
+.\scripts\start-frontend.ps1
+```
+
+### Access Points (Legacy)
+- 🌐 **Frontend:** http://localhost:3003
 - 🔌 **Backend API:** http://localhost:8001/docs
-- 🔐 **Admin Panel:** http://localhost:3003/admin
 - 🏥 **Health Check:** http://localhost:8001/health
 
 ---
