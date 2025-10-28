@@ -1,0 +1,19 @@
+version: "3.9"
+
+# Base production configuration
+# Override with docker-compose.override.yml for local development
+
+services:
+  redis:
+    image: redis:7-alpine
+    networks:
+      - autopro-network
+
+  postgres:
+    image: postgres:16-alpine
+    networks:
+      - autopro-network
+
+networks:
+  autopro-network:
+    driver: bridge
