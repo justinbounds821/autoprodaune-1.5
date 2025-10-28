@@ -22,10 +22,12 @@ def create_job(job_id: str, meta: Optional[Dict[str, Any]] = None) -> None:
     """
     JOBS[job_id] = {
         "status": "queued",
+        "progress": 0,
         "created_at": datetime.utcnow().isoformat(),
         "updated_at": datetime.utcnow().isoformat(),
         "video_url": None,
         "error": None,
+        "error_message": None,
         "meta": meta or {},
     }
     logger.info(f"Created job {job_id}")
@@ -53,6 +55,37 @@ def set_status(job_id: str, status: str, **kwargs) -> bool:
     })
     
     logger.info(f"Updated job {job_id} status to {status}")
+    return True
+
+def update_progress(job_id: str, progress: int, message: str = "") -> bool:
+    """
+    Update job progress.
+    
+    Args:
+        job_id: Job identifier
+        progress: Progress percentage (0-100)
+        message: Optional status message
+        
+    Returns:
+        True if job exists and was updated, False otherwise
+    """
+    if job_id not in JOBS:
+        logger.warning(f"Job {job_id} not found")
+        return False
+    
+    progress = max(0, min(100, progress))  # Clamp to 0-100
+    
+    update_data = {
+        "progress": progress,
+        "updated_at": datetime.utcnow().isoformat()
+    }
+    
+    if message:
+        update_data["status_message"] = message
+    
+    JOBS[job_id].update(update_data)
+    
+    logger.info(f"Updated job {job_id} progress to {progress}%")
     return True
 
 def get_job(job_id: str) -> Optional[Dict[str, Any]]:
