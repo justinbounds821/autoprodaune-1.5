@@ -1,4 +1,4 @@
-# Stage 1: Common library (no pip install here)
+# Stage 1: Common library (no dependencies installed here)
 FROM python:3.11-slim AS common
 WORKDIR /autopro-common
 COPY ../../autopro-common/ /autopro-common/
