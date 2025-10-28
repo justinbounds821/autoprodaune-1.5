@@ -1,0 +1,250 @@
+version: '3.8'
+
+services:
+  # ==================== INFRASTRUCTURE ====================
+  
+  # Redis Message Queue & Cache
+  redis:
+    image: redis:7-alpine
+    container_name: autopro-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - autopro-network
+
+  # PostgreSQL (optional - Supabase external)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: autopro-postgres
+  #   environment:
+  #     POSTGRES_DB: autopro
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   restart: unless-stopped
+  #   networks:
+  #     - autopro-network
+
+  # ==================== MICROSERVICES ====================
+  
+  # Core API Service (Leads, Referrals, Financial)
+  core-api:
+    build:
+      context: ./microservices/core-api
+      dockerfile: Dockerfile
+    container_name: autopro-core-api
+    ports:
+      - "8001:8000"
+    environment:
+      - PORT=8000
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-${SUPABASE_KEY}}
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - autopro-network
+
+  # Video Service (3 workers)
+  video-service:
+    build:
+      context: ./microservices/video-service
+      dockerfile: Dockerfile
+    container_name: autopro-video-service
+    ports:
+      - "8002:8000"
+    environment:
+      - PORT=8000
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - VIDEO_SERVICE_URL=http://video-service:8000
+    volumes:
+      - video_cache:/tmp
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - autopro-network
+
+  # Scheduler Service (placeholder - needs Celery setup)
+  # scheduler-service:
+  #   build:
+  #     context: ./microservices/scheduler-service
+  #     dockerfile: Dockerfile
+  #   container_name: autopro-scheduler
+  #   ports:
+  #     - "8003:8000"
+  #   environment:
+  #     - PORT=8000
+  #     - REDIS_URL=redis://redis:6379
+  #     - SUPABASE_URL=${SUPABASE_URL}
+  #     - SUPABASE_KEY=${SUPABASE_KEY}
+  #   depends_on:
+  #     - redis
+  #   restart: unless-stopped
+  #   networks:
+  #     - autopro-network
+
+  # Social Media Service (placeholder)
+  # social-service:
+  #   build:
+  #     context: ./microservices/social-service
+  #     dockerfile: Dockerfile
+  #   container_name: autopro-social
+  #   ports:
+  #     - "8004:8000"
+  #   environment:
+  #     - PORT=8000
+  #     - REDIS_URL=redis://redis:6379
+  #     - TIKTOK_ACCESS_TOKEN=${TIKTOK_ACCESS_TOKEN:-}
+  #     - INSTAGRAM_ACCESS_TOKEN=${INSTAGRAM_ACCESS_TOKEN:-}
+  #     - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+  #     - FACEBOOK_ACCESS_TOKEN=${FACEBOOK_ACCESS_TOKEN:-}
+  #   depends_on:
+  #     - redis
+  #   restart: unless-stopped
+  #   networks:
+  #     - autopro-network
+
+  # ==================== FRONTEND ====================
+  
+  # React Frontend
+  frontend:
+    build:
+      context: ./02_FRONTEND_UI_CLEAN
+      dockerfile: Dockerfile
+    container_name: autopro-frontend
+    ports:
+      - "3003:3000"
+    environment:
+      - VITE_API_URL=http://localhost:80
+      - VITE_API_BASE_URL=http://localhost:80
+      - VITE_SUPABASE_URL=${SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${SUPABASE_KEY}
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - autopro-network
+
+  # ==================== API GATEWAY ====================
+  
+  # Nginx API Gateway
+  api-gateway:
+    image: nginx:alpine
+    container_name: autopro-gateway
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - core-api
+      - video-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - autopro-network
+
+  # ==================== MONITORING ====================
+  
+  # Prometheus Metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: autopro-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: unless-stopped
+    networks:
+      - autopro-network
+
+  # Grafana Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: autopro-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - autopro-network
+
+# ==================== VOLUMES ====================
+
+volumes:
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  video_cache:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ==================== NETWORKS ====================
+
+networks:
+  autopro-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

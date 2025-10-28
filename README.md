@@ -1,8 +1,9 @@
 # 🚀 AutoPro Daune - Lead Generation & Automation System
 
-**Status:** ✅ PRODUCTION READY (93% Complete)  
-**Version:** 2.0.0  
-**Last Update:** 1 Octombrie 2025
+**Status:** ✅ PRODUCTION READY - MICROSERVICES ARCHITECTURE  
+**Version:** 3.0.0 🎉  
+**Last Update:** 28 Octombrie 2025  
+**Architecture:** Event-Driven Microservices
 
 ---
 
@@ -28,44 +29,51 @@
 
 ## 🚀 QUICK START
 
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- Supabase account
+### ⚡ MICROSERVICES (Recommended)
 
-### Start Complete System (One Command)
-```powershell
-.\scripts\start-full-system.ps1
+**New architecture with async video processing, horizontal scaling, and 10-25x faster response times!**
+
+```bash
+# 1. Start all microservices
+docker-compose -f docker-compose.microservices.yml up -d
+
+# 2. Check status
+docker-compose -f docker-compose.microservices.yml ps
+
+# 3. View logs
+docker-compose -f docker-compose.microservices.yml logs -f
 ```
 
-### Start Local (Basic)
+**Read the guide:** [START_MICROSERVICES.md](START_MICROSERVICES.md)
+
+**Architecture docs:** [DIAGNOSTIC_TEHNIC_AUTOPRODAUNE_MCP_ORCHESTRATOR.md](DIAGNOSTIC_TEHNIC_AUTOPRODAUNE_MCP_ORCHESTRATOR.md)
+
+### Access Points (Microservices)
+- 🌐 **Frontend:** http://localhost:3003
+- 🔌 **API Gateway:** http://localhost (routes to all services)
+- 🎬 **Video Service:** http://localhost:8002
+- 💼 **Core API:** http://localhost:8001
+- 📊 **Prometheus:** http://localhost:9090
+- 📈 **Grafana:** http://localhost:3000
+
+---
+
+### 🏛️ MONOLITH (Legacy)
+
+**Old architecture (still works but not recommended for production):**
+
 ```powershell
+# Start legacy monolith
 .\scripts\start-all.ps1
-```
 
-### Manual Start
-```powershell
-# Backend
+# Or manually:
 .\scripts\start-backend.ps1
-
-# Frontend (in new terminal)
 .\scripts\start-frontend.ps1
 ```
 
-### Health Check
-```powershell
-.\scripts\health-check.ps1
-```
-
-### Production Build
-```powershell
-.\scripts\build-production.ps1
-```
-
-### Access Points
+### Access Points (Legacy)
 - 🌐 **Frontend:** http://localhost:3003
 - 🔌 **Backend API:** http://localhost:8001/docs
-- 🔐 **Admin Panel:** http://localhost:3003/admin
 - 🏥 **Health Check:** http://localhost:8001/health
 
 ---

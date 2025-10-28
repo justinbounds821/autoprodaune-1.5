@@ -1,0 +1,54 @@
+# Prometheus Configuration for AutoPro Microservices
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'autopro'
+    environment: 'production'
+
+# Scrape configurations
+scrape_configs:
+  # Core API Service
+  - job_name: 'core-api'
+    static_configs:
+      - targets: ['core-api:8000']
+        labels:
+          service: 'core-api'
+          type: 'microservice'
+    metrics_path: '/metrics'
+    
+  # Video Service
+  - job_name: 'video-service'
+    static_configs:
+      - targets: ['video-service:8000']
+        labels:
+          service: 'video-service'
+          type: 'microservice'
+    metrics_path: '/metrics'
+  
+  # Redis Exporter (optional)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+        labels:
+          service: 'redis'
+          type: 'infrastructure'
+  
+  # Nginx Gateway (optional if nginx-prometheus-exporter is added)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['api-gateway:80']
+        labels:
+          service: 'nginx'
+          type: 'gateway'
+    metrics_path: '/metrics'
+
+# Alerting rules
+rule_files:
+  - 'rules/alerts.yml'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
