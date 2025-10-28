@@ -1,0 +1,10 @@
+# Build stage pentru autopro-common library
+FROM python:3.11-slim AS common
+
+WORKDIR /autopro-common
+
+# Copy common library
+COPY autopro-common/ /autopro-common/
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt

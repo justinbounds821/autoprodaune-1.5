@@ -1,0 +1,56 @@
+name: Smoke Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke-docker-compose:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build services
+        run: |
+          cd autopro_refactor_full_connected
+          docker-compose -f docker-compose.yml -f docker-compose.override.yml build
+      
+      - name: Start services
+        run: |
+          cd autopro_refactor_full_connected
+          docker-compose -f docker-compose.yml -f docker-compose.override.yml up -d
+      
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for services to start..."
+          sleep 30
+      
+      - name: Health check - lead-service
+        run: curl -f http://localhost:8001/health || exit 1
+      
+      - name: Health check - mcp-service
+        run: curl -f http://localhost:8010/health || exit 1
+      
+      - name: Check Prometheus
+        run: curl -f http://localhost:9090/-/ready || exit 1
+      
+      - name: Check Grafana
+        run: curl -f http://localhost:3000/api/health || exit 1
+      
+      - name: Show service logs on failure
+        if: failure()
+        run: |
+          cd autopro_refactor_full_connected
+          docker-compose logs
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          cd autopro_refactor_full_connected
+          docker-compose down -v

@@ -1,0 +1,279 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: autopro-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: autopro-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: autopro
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: autopro-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: autopro-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  lead-service:
+    build:
+      context: .
+      dockerfile: microservices/lead-service/Dockerfile
+    container_name: autopro-lead-service
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LINEAR_API_KEY=${LINEAR_API_KEY:-}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - autopro-network
+    restart: unless-stopped
+  video-service:
+    build:
+      context: .
+      dockerfile: microservices/video-service/Dockerfile
+    container_name: autopro-video-service
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LINEAR_API_KEY=${LINEAR_API_KEY:-}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - autopro-network
+    restart: unless-stopped
+  social-service:
+    build:
+      context: .
+      dockerfile: microservices/social-service/Dockerfile
+    container_name: autopro-social-service
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LINEAR_API_KEY=${LINEAR_API_KEY:-}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - autopro-network
+    restart: unless-stopped
+  financial-service:
+    build:
+      context: .
+      dockerfile: microservices/financial-service/Dockerfile
+    container_name: autopro-financial-service
+    ports:
+      - "8004:8004"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LINEAR_API_KEY=${LINEAR_API_KEY:-}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - autopro-network
+    restart: unless-stopped
+  referral-service:
+    build:
+      context: .
+      dockerfile: microservices/referral-service/Dockerfile
+    container_name: autopro-referral-service
+    ports:
+      - "8005:8005"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LINEAR_API_KEY=${LINEAR_API_KEY:-}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - autopro-network
+    restart: unless-stopped
+  automation-service:
+    build:
+      context: .
+      dockerfile: microservices/automation-service/Dockerfile
+    container_name: autopro-automation-service
+    ports:
+      - "8006:8006"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LINEAR_API_KEY=${LINEAR_API_KEY:-}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - autopro-network
+    restart: unless-stopped
+  notification-service:
+    build:
+      context: .
+      dockerfile: microservices/notification-service/Dockerfile
+    container_name: autopro-notification-service
+    ports:
+      - "8007:8007"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LINEAR_API_KEY=${LINEAR_API_KEY:-}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - autopro-network
+    restart: unless-stopped
+  analytics-service:
+    build:
+      context: .
+      dockerfile: microservices/analytics-service/Dockerfile
+    container_name: autopro-analytics-service
+    ports:
+      - "8008:8008"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LINEAR_API_KEY=${LINEAR_API_KEY:-}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - autopro-network
+    restart: unless-stopped
+  whatsapp-service:
+    build:
+      context: .
+      dockerfile: microservices/whatsapp-service/Dockerfile
+    container_name: autopro-whatsapp-service
+    ports:
+      - "8009:8009"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LINEAR_API_KEY=${LINEAR_API_KEY:-}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - autopro-network
+    restart: unless-stopped
+  mcp-service:
+    build:
+      context: .
+      dockerfile: microservices/mcp-service/Dockerfile
+    container_name: autopro-mcp-service
+    ports:
+      - "8010:8010"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LINEAR_API_KEY=${LINEAR_API_KEY:-}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  autopro-network:
+    driver: bridge
