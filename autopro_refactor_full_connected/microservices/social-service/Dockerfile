@@ -1,8 +1,7 @@
-# Stage 1: Build common library
+# Stage 1: Common library (no pip install here)
 FROM python:3.11-slim AS common
 WORKDIR /autopro-common
 COPY ../../autopro-common/ /autopro-common/
-RUN pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Service
 FROM python:3.11-slim

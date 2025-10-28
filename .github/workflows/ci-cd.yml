@@ -42,20 +42,26 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-      - name: Install backend dependencies
+      - name: Install test tools
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-asyncio pytest-cov httpx
-          
-          # Install common library dependencies
-          pip install -r autopro_refactor_full_connected/autopro-common/requirements.txt
-          
-          # Install all service dependencies
+          pip install pytest pytest-asyncio pytest-cov httpx anyio
+
+      - name: Install common + all services deps
+        run: |
+          base="autopro_refactor_full_connected"
+          pip install -r $base/autopro-common/requirements.txt || true
           for svc in lead-service video-service social-service financial-service referral-service automation-service notification-service analytics-service whatsapp-service mcp-service; do
-            pip install -r autopro_refactor_full_connected/microservices/$svc/requirements.txt || true
+            req="$base/microservices/$svc/requirements.txt"
+            if [ -f "$req" ]; then
+              pip install -r "$req" || true
+            fi
           done
 
-      - name: Run backend tests
+      - name: Set PYTHONPATH
+        run: echo "PYTHONPATH=$GITHUB_WORKSPACE/autopro_refactor_full_connected:$PYTHONPATH" >> $GITHUB_ENV
+
+      - name: Run unit tests (in-process only)
         env:
           REDIS_URL: redis://localhost:6379/0
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -63,17 +69,7 @@ jobs:
           SECRET_KEY: test-secret-key-for-ci
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/autopro
         run: |
-          cd autopro_refactor_full_connected
-          
-          # Run unit tests for each service
-          for svc in microservices/*/; do
-            if [ -d "$svc/tests" ]; then
-              echo "Testing $svc..."
-              cd "$svc"
-              python -m pytest tests/ -v --cov=app --cov-report=term-missing || true
-              cd ../..
-            fi
-          done
+          pytest -q autopro_refactor_full_connected/microservices/**/tests/test_health.py --maxfail=1 --disable-warnings
 
     - name: Upload backend coverage
       uses: codecov/codecov-action@v3

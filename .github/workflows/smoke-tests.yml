@@ -20,23 +20,40 @@ jobs:
       - name: Build services
         run: |
           cd autopro_refactor_full_connected
-          docker-compose -f docker-compose.yml -f docker-compose.override.yml build
+          docker-compose -f docker-compose.yml -f docker-compose.override.yml build --no-cache
       
       - name: Start services
         run: |
           cd autopro_refactor_full_connected
           docker-compose -f docker-compose.yml -f docker-compose.override.yml up -d
       
-      - name: Wait for services to be ready
+      - name: Wait & health check - lead-service
         run: |
-          echo "Waiting for services to start..."
-          sleep 30
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:8001/health; then
+              echo "✅ lead-service OK"
+              break
+            fi
+            if [ $i -eq 120 ]; then
+              echo "❌ lead-service DOWN after 120s"
+              exit 1
+            fi
+            sleep 1
+          done
       
-      - name: Health check - lead-service
-        run: curl -f http://localhost:8001/health || exit 1
-      
-      - name: Health check - mcp-service
-        run: curl -f http://localhost:8010/health || exit 1
+      - name: Wait & health check - mcp-service
+        run: |
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:8010/health; then
+              echo "✅ mcp-service OK"
+              break
+            fi
+            if [ $i -eq 120 ]; then
+              echo "❌ mcp-service DOWN after 120s"
+              exit 1
+            fi
+            sleep 1
+          done
       
       - name: Check Prometheus
         run: curl -f http://localhost:9090/-/ready || exit 1
