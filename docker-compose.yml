@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # FastAPI Backend
+  # FastAPI Backend - Main API (toate routerele)
   api:
     build:
       context: ./services/api
@@ -34,6 +34,51 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    networks:
+      - autopro-network
+
+  # Core API Service - Doar Leads, Referrals, Financial (MICROSERVICIU)
+  core-api:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile.core
+    container_name: autopro-core-api
+    ports:
+      - "8002:8000"
+    environment:
+      - PORT=8000
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services/api:/app
+    depends_on:
+      - redis
+    command: ["uvicorn", "app.main_core_api:app", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+    networks:
+      - autopro-network
+
+  # Video Service - Doar Video Generation (MICROSERVICIU ASYNC)
+  video-service:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile.video
+    container_name: autopro-video-service
+    ports:
+      - "8003:8000"
+    environment:
+      - PORT=8000
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services/api:/app
+      - video_cache:/app/video_cache
+    depends_on:
+      - redis
+    command: ["uvicorn", "app.main_video_service:app", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
     networks:
       - autopro-network
 

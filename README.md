@@ -1,9 +1,9 @@
 # 🚀 AutoPro Daune - Lead Generation & Automation System
 
-**Status:** ✅ PRODUCTION READY - MICROSERVICES ARCHITECTURE  
-**Version:** 3.0.0 🎉  
+**Status:** ✅ PRODUCTION READY - Refactorizare Corectă În Curs  
+**Version:** 3.0.0 (Refactoring)  
 **Last Update:** 28 Octombrie 2025  
-**Architecture:** Event-Driven Microservices
+**Architecture:** Microservicii din cod existent (backwards compatible)
 
 ---
 
@@ -29,32 +29,30 @@
 
 ## 🚀 QUICK START
 
-### ⚡ MICROSERVICES (Recommended)
+### ⚡ REFACTORIZARE CORECTĂ (Folosind cod existent)
 
-**New architecture with async video processing, horizontal scaling, and 10-25x faster response times!**
+**Arhitectură microservicii DIN codul existent - backwards compatible!**
 
 ```bash
-# 1. Start all microservices
-docker-compose -f docker-compose.microservices.yml up -d
+# Start toate serviciile (hybrid)
+docker-compose up -d
 
-# 2. Check status
-docker-compose -f docker-compose.microservices.yml ps
+# SAU doar API original (backwards compatible)
+docker-compose up -d api frontend redis
 
-# 3. View logs
-docker-compose -f docker-compose.microservices.yml logs -f
+# SAU doar microservicii
+docker-compose up -d core-api video-service frontend redis
 ```
 
-**Read the guide:** [START_MICROSERVICES.md](START_MICROSERVICES.md)
+**Read the guide:** [START_REFACTORIZARE_CORECTĂ.md](START_REFACTORIZARE_CORECTĂ.md)
 
-**Architecture docs:** [DIAGNOSTIC_TEHNIC_AUTOPRODAUNE_MCP_ORCHESTRATOR.md](DIAGNOSTIC_TEHNIC_AUTOPRODAUNE_MCP_ORCHESTRATOR.md)
+**Architecture docs:** [REFACTORIZARE_CORECTĂ_3.0.md](REFACTORIZARE_CORECTĂ_3.0.md)
 
-### Access Points (Microservices)
+### Access Points
 - 🌐 **Frontend:** http://localhost:3003
-- 🔌 **API Gateway:** http://localhost (routes to all services)
-- 🎬 **Video Service:** http://localhost:8002
-- 💼 **Core API:** http://localhost:8001
-- 📊 **Prometheus:** http://localhost:9090
-- 📈 **Grafana:** http://localhost:3000
+- 🔌 **API Original (toate routerele):** http://localhost:8001
+- 💼 **Core API Microservice:** http://localhost:8002
+- 🎬 **Video Service Microservice:** http://localhost:8003
 
 ---
 
