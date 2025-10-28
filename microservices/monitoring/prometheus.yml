@@ -1,0 +1,108 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'autopro-microservices'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Load rules once and periodically evaluate them
+rule_files:
+  # - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Lead Service
+  - job_name: 'lead-service'
+    static_configs:
+      - targets: ['lead-service:8001']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Video Service
+  - job_name: 'video-service'
+    static_configs:
+      - targets: ['video-service:8002']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Social Service
+  - job_name: 'social-service'
+    static_configs:
+      - targets: ['social-service:8003']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Financial Service
+  - job_name: 'financial-service'
+    static_configs:
+      - targets: ['financial-service:8004']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Referral Service
+  - job_name: 'referral-service'
+    static_configs:
+      - targets: ['referral-service:8005']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Automation Service
+  - job_name: 'automation-service'
+    static_configs:
+      - targets: ['automation-service:8006']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Notification Service
+  - job_name: 'notification-service'
+    static_configs:
+      - targets: ['notification-service:8007']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Analytics Service
+  - job_name: 'analytics-service'
+    static_configs:
+      - targets: ['analytics-service:8008']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # WhatsApp Service
+  - job_name: 'whatsapp-service'
+    static_configs:
+      - targets: ['whatsapp-service:8009']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # MCP Service
+  - job_name: 'mcp-service'
+    static_configs:
+      - targets: ['mcp-service:8010']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # PostgreSQL Exporter
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+
+  # Redis Exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+
+  # RabbitMQ
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']

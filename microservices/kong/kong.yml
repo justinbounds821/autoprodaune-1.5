@@ -1,0 +1,121 @@
+_format_version: "3.0"
+
+# ==================== SERVICES ====================
+services:
+  - name: lead-service
+    url: http://lead-service:8001
+    routes:
+      - name: lead-routes
+        paths:
+          - /api/leads
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+      - name: cors
+        config:
+          origins:
+            - "*"
+          credentials: true
+
+  - name: video-service
+    url: http://video-service:8002
+    routes:
+      - name: video-routes
+        paths:
+          - /api/videos
+        strip_path: false
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 50
+          policy: local
+
+  - name: social-service
+    url: http://social-service:8003
+    routes:
+      - name: social-routes
+        paths:
+          - /api/social
+        strip_path: false
+
+  - name: financial-service
+    url: http://financial-service:8004
+    routes:
+      - name: financial-routes
+        paths:
+          - /api/financial
+        strip_path: false
+
+  - name: referral-service
+    url: http://referral-service:8005
+    routes:
+      - name: referral-routes
+        paths:
+          - /api/referrals
+        strip_path: false
+
+  - name: automation-service
+    url: http://automation-service:8006
+    routes:
+      - name: automation-routes
+        paths:
+          - /api/automation
+        strip_path: false
+
+  - name: notification-service
+    url: http://notification-service:8007
+    routes:
+      - name: notification-routes
+        paths:
+          - /api/notifications
+        strip_path: false
+
+  - name: analytics-service
+    url: http://analytics-service:8008
+    routes:
+      - name: analytics-routes
+        paths:
+          - /api/analytics
+        strip_path: false
+
+  - name: whatsapp-service
+    url: http://whatsapp-service:8009
+    routes:
+      - name: whatsapp-routes
+        paths:
+          - /api/whatsapp
+        strip_path: false
+
+  - name: mcp-service
+    url: http://mcp-service:8010
+    routes:
+      - name: mcp-routes
+        paths:
+          - /api/mcp
+        strip_path: false
+
+# ==================== PLUGINS ====================
+plugins:
+  - name: prometheus
+    config:
+      per_consumer: false
+
+  - name: request-transformer
+    config:
+      add:
+        headers:
+          - X-Gateway: Kong
+
+  - name: correlation-id
+    config:
+      header_name: X-Request-ID
+      generator: uuid
+      echo_downstream: true

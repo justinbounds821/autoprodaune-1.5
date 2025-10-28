@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: autopro
+  labels:
+    name: autopro
+    environment: production

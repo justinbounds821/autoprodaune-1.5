@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: autopro-ingress
+  namespace: autopro
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/strip-path: "true"
+    konghq.com/plugins: rate-limiting, cors
+spec:
+  rules:
+  - host: api.autopro.ro
+    http:
+      paths:
+  - path: /api/lead\n    pathType: Prefix\n    backend:\n      service:\n        name: lead-service\n        port:\n          number: 8001\n  - path: /api/video\n    pathType: Prefix\n    backend:\n      service:\n        name: video-service\n        port:\n          number: 8002\n  - path: /api/social\n    pathType: Prefix\n    backend:\n      service:\n        name: social-service\n        port:\n          number: 8003\n  - path: /api/financial\n    pathType: Prefix\n    backend:\n      service:\n        name: financial-service\n        port:\n          number: 8004\n  - path: /api/referral\n    pathType: Prefix\n    backend:\n      service:\n        name: referral-service\n        port:\n          number: 8005\n  - path: /api/automation\n    pathType: Prefix\n    backend:\n      service:\n        name: automation-service\n        port:\n          number: 8006\n  - path: /api/notification\n    pathType: Prefix\n    backend:\n      service:\n        name: notification-service\n        port:\n          number: 8007\n  - path: /api/analytics\n    pathType: Prefix\n    backend:\n      service:\n        name: analytics-service\n        port:\n          number: 8008\n  - path: /api/whatsapp\n    pathType: Prefix\n    backend:\n      service:\n        name: whatsapp-service\n        port:\n          number: 8009\n  - path: /api/mcp\n    pathType: Prefix\n    backend:\n      service:\n        name: mcp-service\n        port:\n          number: 8010
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: rate-limiting
+  namespace: autopro
+plugin: rate-limiting
+config:
+  minute: 100
+  policy: local
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: cors
+  namespace: autopro
+plugin: cors
+config:
+  origins:
+  - "*"
+  methods:
+  - GET
+  - POST
+  - PUT
+  - DELETE
+  - OPTIONS
+  headers:
+  - Authorization
+  - Content-Type
+  credentials: true
