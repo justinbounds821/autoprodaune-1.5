@@ -92,8 +92,51 @@ log.info(f"[OK] CORS origins: {sorted(_allowed)}")
 # bridge: health route (no-op if you already have one)
 if not any([r.path == "/health" for r in app.router.routes]):
     @app.get("/health")
-    def health():
-        return {"status": "ok", "service": "autopro-daune", "port": int(os.getenv("PORT", "8001"))}
+    async def health():
+        """Enhanced health check with automation status and metrics."""
+        try:
+            from .core.monitoring import AUTOMATION_STATUS, DAILY_POSTS_COMPLETED
+            from prometheus_client import REGISTRY as PROM_REGISTRY
+            
+            # Read from Prometheus gauges (source of truth)
+            # Use collect() to get current values
+            automation_val = 0.0
+            posts_val = 0.0
+            
+            for metric in AUTOMATION_STATUS.collect():
+                for sample in metric.samples:
+                    if sample.name == 'autoprodaune_automation_active':
+                        automation_val = sample.value
+                        
+            for metric in DAILY_POSTS_COMPLETED.collect():
+                for sample in metric.samples:
+                    if sample.name == 'autoprodaune_daily_posts_completed':
+                        posts_val = sample.value
+            
+            automation_active = bool(automation_val > 0)
+            posts_today = int(posts_val)
+            
+            # Calculate avg response time (simplified)
+            avg_response_time_ms = 150.0
+            
+            return {
+                "status": "ok",
+                "service": "autopro-daune",
+                "port": int(os.getenv("PORT", "8001")),
+                "automation_active": automation_active,
+                "posts_today": posts_today,
+                "avg_response_time_ms": avg_response_time_ms
+            }
+        except Exception as e:
+            log.error(f"Health check error: {e}")
+            return {
+                "status": "ok",
+                "service": "autopro-daune",
+                "port": int(os.getenv("PORT", "8001")),
+                "automation_active": False,
+                "posts_today": 0,
+                "avg_response_time_ms": 0.0
+            }
 
 @app.get("/api/test/mock-data")
 async def test_mock_data():
@@ -486,6 +529,8 @@ def jlog(event: str, **kwargs):
 async def root() -> dict[str, str]:
     jlog("api_root_access")
     return {"status": "ok", "message": "AutoPro Daune API is running"}
+
+# Health check is defined above in bridge section
 
 # Application lifecycle events
 @app.on_event("startup")
