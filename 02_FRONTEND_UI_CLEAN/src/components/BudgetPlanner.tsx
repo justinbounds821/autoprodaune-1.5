@@ -33,34 +33,9 @@ import {
   BarChart3
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getFinancialBreakdown, getCostCategories, handleApiError } from '@/services/apiService';
+import type { BudgetCategory, BudgetPlan } from '@/types/api';
 
-interface BudgetCategory {
-  id: string;
-  name: string;
-  description: string;
-  budget_amount: number;
-  spent_amount: number;
-  period: 'monthly' | 'quarterly' | 'yearly';
-  color: string;
-  alerts: {
-    warning_threshold: number; // percentage
-    critical_threshold: number; // percentage
-  };
-}
-
-interface BudgetPlan {
-  id: string;
-  name: string;
-  description: string;
-  total_budget: number;
-  period: 'monthly' | 'quarterly' | 'yearly';
-  start_date: string;
-  end_date: string;
-  status: 'draft' | 'active' | 'completed' | 'paused';
-  categories: BudgetCategory[];
-  created_at: string;
-  updated_at: string;
-}
 
 const BUDGET_PERIODS = [
   { value: 'monthly', label: 'Lunar' },
@@ -103,64 +78,51 @@ export default function BudgetPlanner() {
 
   useEffect(() => {
     loadBudgetPlans();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadBudgetPlans = async () => {
     try {
       setLoading(true);
-      // Simulated data - în producție ar fi API call
-      const mockPlans: BudgetPlan[] = [
-        {
-          id: '1',
-          name: 'Buget Q1 2025',
-          description: 'Bugetul pentru primul trimestru al anului 2025',
-          total_budget: 30000,
-          period: 'quarterly',
-          start_date: '2025-01-01',
-          end_date: '2025-03-31',
-          status: 'active',
-          categories: [
-            {
-              id: '1',
-              name: 'Marketing',
-              description: 'Cheltuieli cu publicitate și promovare',
-              budget_amount: 5000,
-              spent_amount: 3200,
-              period: 'quarterly',
-              color: '#3B82F6',
-              alerts: { warning_threshold: 70, critical_threshold: 90 }
-            },
-            {
-              id: '2',
-              name: 'Dezvoltare',
-              description: 'Salarii dezvoltatori și infrastructură',
-              budget_amount: 15000,
-              spent_amount: 11200,
-              period: 'quarterly',
-              color: '#10B981',
-              alerts: { warning_threshold: 70, critical_threshold: 90 }
-            },
-            {
-              id: '3',
-              name: 'Oficiu',
-              description: 'Chirie, utilități, echipamente',
-              budget_amount: 3000,
-              spent_amount: 2800,
-              period: 'quarterly',
-              color: '#F59E0B',
-              alerts: { warning_threshold: 70, critical_threshold: 90 }
-            }
-          ],
-          created_at: '2025-01-01T00:00:00Z',
-          updated_at: '2025-01-15T10:30:00Z'
-        }
-      ];
-      setBudgetPlans(mockPlans);
+      
+      // Load financial breakdown and categories
+      const [breakdown, costCategories] = await Promise.all([
+        getFinancialBreakdown('90d'),
+        getCostCategories()
+      ]);
+      
+      // Build budget plan from current spending
+      const categories: BudgetCategory[] = Object.entries(breakdown.costs?.by_category || {}).map(([name, amount], idx) => ({
+        id: `${idx + 1}`,
+        name,
+        description: costCategories.find(c => c.name === name)?.description || 'Auto-generated category',
+        budget_amount: (amount as number) * 1.2, // 20% buffer
+        spent_amount: amount as number,
+        period: 'quarterly' as const,
+        color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
+        alerts: { warning_threshold: 70, critical_threshold: 90 }
+      }));
+      
+      const plan: BudgetPlan = {
+        id: '1',
+        name: 'Current Budget Overview',
+        description: 'Auto-generated from actual spending (last 90 days)',
+        total_budget: categories.reduce((sum, c) => sum + c.budget_amount, 0),
+        period: 'quarterly',
+        start_date: breakdown.start_date,
+        end_date: breakdown.end_date,
+        status: 'active',
+        categories,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      setBudgetPlans([plan]);
     } catch (error) {
       console.error('Failed to load budget plans:', error);
       toast({
         title: "Eroare",
-        description: "Nu s-au putut încărca planurile de buget.",
+        description: handleApiError(error),
         variant: "destructive",
       });
     } finally {
@@ -194,7 +156,7 @@ export default function BudgetPlanner() {
     setCategories(prev => [...prev, newCategory]);
   };
 
-  const updateCategory = (index: number, field: keyof BudgetCategory, value: any) => {
+  const updateCategory = (index: number, field: keyof BudgetCategory, value: string | number | boolean) => {
     setCategories(prev => prev.map((cat, i) => 
       i === index ? { ...cat, [field]: value } : cat
     ));
@@ -213,60 +175,11 @@ export default function BudgetPlanner() {
   };
 
   const handleCreateBudgetPlan = async () => {
-    if (categories.length === 0) {
-      toast({
-        title: "Lipsesc categoriile",
-        description: "Adaugă cel puțin o categorie în buget.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const totalBudget = calculateTotalBudget();
-      const newPlan: BudgetPlan = {
-        id: Date.now().toString(),
-        name: formData.name,
-        description: formData.description,
-        total_budget: totalBudget,
-        period: formData.period,
-        start_date: formData.start_date,
-        end_date: formData.end_date,
-        status: 'draft',
-        categories: categories.map((cat, index) => ({
-          ...cat,
-          id: `${Date.now()}_${index}`
-        })),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      setBudgetPlans(prev => [newPlan, ...prev]);
-      
-      toast({
-        title: "Plan de buget creat",
-        description: `Planul "${newPlan.name}" a fost creat cu succes.`,
-      });
-
-      // Reset form
-      setFormData({
-        name: '',
-        description: '',
-        total_budget: '',
-        period: 'monthly',
-        start_date: '',
-        end_date: ''
-      });
-      setCategories([]);
-      setIsCreateDialogOpen(false);
-
-    } catch (error) {
-      toast({
-        title: "Eroare",
-        description: "Nu s-a putut crea planul de buget.",
-        variant: "destructive",
-      });
-    }
+    toast({
+      title: "Funcție indisponibilă",
+      description: "Planurile de buget nu sunt persistate. Această pagină arată o privire de ansamblu bazată pe cheltuielile reale.",
+    });
+    setIsCreateDialogOpen(false);
   };
 
   const getStatusColor = (status: BudgetPlan['status']) => {

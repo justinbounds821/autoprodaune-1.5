@@ -4,19 +4,10 @@
  * File Length: < 200 lines ✅
  */
 
-import api from '@/services/autoproApi';
+import { getBusinessInsights } from '@/services/apiService';
+import type { BusinessInsight, AIInsightsResponse } from '@/types/api';
 
-export interface InsightData {
-  id: string;
-  type: 'trend' | 'prediction' | 'recommendation' | 'alert';
-  title: string;
-  description: string;
-  confidence: number;
-  impact: 'low' | 'medium' | 'high' | 'critical';
-  category: 'leads' | 'financial' | 'social' | 'operations';
-  data: Record<string, any>;
-  created_at: string;
-}
+export type InsightData = BusinessInsight;
 
 export interface AIInsightMetrics {
   total_insights: number;
@@ -30,11 +21,7 @@ export interface AIInsightsAPIContext {
   source_counts: Record<string, number>;
 }
 
-export interface AIInsightsAPIResponse {
-  insights: InsightData[];
-  metrics: AIInsightMetrics;
-  context: AIInsightsAPIContext;
-}
+export type AIInsightsAPIResponse = AIInsightsResponse;
 
 export class AIInsightsManager {
   private insights: InsightData[] = [];
@@ -43,14 +30,22 @@ export class AIInsightsManager {
 
   async loadInsights(filters?: Record<string, unknown>): Promise<InsightData[]> {
     try {
-      const response: AIInsightsAPIResponse = await api.getAIInsights(filters);
+      const response = await getBusinessInsights(filters);
       this.insights = response.insights;
       this.metrics = response.metrics;
       this.context = response.context;
       return this.insights;
     } catch (error) {
       console.error('Failed to load AI insights:', error);
-      throw new Error('Failed to load AI insights');
+      // Return empty array on error instead of throwing
+      this.insights = [];
+      this.metrics = {
+        total_insights: 0,
+        high_confidence_insights: 0,
+        critical_alerts: 0,
+        categories: {}
+      };
+      return this.insights;
     }
   }
 
