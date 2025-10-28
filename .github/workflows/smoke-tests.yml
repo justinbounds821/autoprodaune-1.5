@@ -1,10 +1,11 @@
-name: Smoke Tests
+name: Smoke Tests (docker-compose)
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main, develop]
+    branches: [main, develop, cursor/**]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
   smoke-docker-compose:

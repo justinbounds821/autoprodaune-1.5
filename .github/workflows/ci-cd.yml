@@ -1,10 +1,10 @@
-name: AutoPro Daune CI/CD Pipeline
+name: AutoPro Daune CI/CD Pipeline (Microservices + GHCR)
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, cursor/** ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
   workflow_dispatch:
 
 env:
@@ -235,6 +235,7 @@ jobs:
       packages: write
 
             strategy:
+      fail-fast: false
       matrix:
         service: [lead-service, video-service, social-service, financial-service, 
                  referral-service, automation-service, notification-service, 
