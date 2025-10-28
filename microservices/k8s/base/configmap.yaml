@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: autopro-config
+  namespace: autopro
+data:
+  DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/autopro"
+  REDIS_URL: "redis://redis:6379/0"
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+  LOG_LEVEL: "INFO"
+  CORS_ORIGINS: "*"
+  ENVIRONMENT: "production"

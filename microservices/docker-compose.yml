@@ -1,0 +1,458 @@
+version: '3.8'
+
+services:
+  # ==================== INFRASTRUCTURE ====================
+  
+  # PostgreSQL Database (Supabase-compatible)
+  postgres:
+    image: postgres:15-alpine
+    container_name: autopro-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: autopro
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  # Redis Cache & Pub/Sub
+  redis:
+    image: redis:7-alpine
+    container_name: autopro-redis
+    command: redis-server --appendonly yes --requirepass redis_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: autopro-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  # ==================== MONITORING & OBSERVABILITY ====================
+
+  # Prometheus - Metrics Collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: autopro-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - autopro-network
+    restart: unless-stopped
+    depends_on:
+      - lead-service
+      - video-service
+      - social-service
+
+  # Grafana - Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: autopro-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+      - grafana_data:/var/lib/grafana
+    networks:
+      - autopro-network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  # Jaeger - Distributed Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: autopro-jaeger
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: :9411
+      COLLECTOR_OTLP_ENABLED: true
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686" # UI
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  # ==================== API GATEWAY ====================
+
+  # Kong API Gateway
+  kong-database:
+    image: postgres:15-alpine
+    container_name: kong-database
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kong
+      POSTGRES_DB: kong
+    volumes:
+      - kong_data:/var/lib/postgresql/data
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  kong-migration:
+    image: kong:3.4-alpine
+    container_name: kong-migration
+    command: kong migrations bootstrap
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+    networks:
+      - autopro-network
+    depends_on:
+      - kong-database
+    restart: on-failure
+
+  kong:
+    image: kong:3.4-alpine
+    container_name: autopro-kong
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+    ports:
+      - "8000:8000"  # Proxy
+      - "8443:8443"  # Proxy SSL
+      - "8001:8001"  # Admin API
+      - "8444:8444"  # Admin API SSL
+    networks:
+      - autopro-network
+    depends_on:
+      - kong-database
+      - kong-migration
+    restart: unless-stopped
+
+  # ==================== MICROSERVICES ====================
+
+  # Lead Service (8001)
+  lead-service:
+    build:
+      context: .
+      dockerfile: lead-service/Dockerfile
+    container_name: lead-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      REDIS_URL: redis://:redis_password@redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: "*"
+    ports:
+      - "8001:8001"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - autopro-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Video Service (8002)
+  video-service:
+    build:
+      context: .
+      dockerfile: video-service/Dockerfile
+    container_name: video-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      REDIS_URL: redis://:redis_password@redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: "*"
+    ports:
+      - "8002:8002"
+    volumes:
+      - video_cache:/app/video_cache
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - autopro-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Social Service (8003)
+  social-service:
+    build:
+      context: .
+      dockerfile: social-service/Dockerfile
+    container_name: social-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      REDIS_URL: redis://:redis_password@redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: "*"
+      TIKTOK_ACCESS_TOKEN: ${TIKTOK_ACCESS_TOKEN:-}
+      INSTAGRAM_ACCESS_TOKEN: ${INSTAGRAM_ACCESS_TOKEN:-}
+      FACEBOOK_ACCESS_TOKEN: ${FACEBOOK_ACCESS_TOKEN:-}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
+    ports:
+      - "8003:8003"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  # Financial Service (8004)
+  financial-service:
+    build:
+      context: .
+      dockerfile: financial-service/Dockerfile
+    container_name: financial-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      REDIS_URL: redis://:redis_password@redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: "*"
+    ports:
+      - "8004:8004"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  # Referral Service (8005)
+  referral-service:
+    build:
+      context: .
+      dockerfile: referral-service/Dockerfile
+    container_name: referral-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      REDIS_URL: redis://:redis_password@redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: "*"
+    ports:
+      - "8005:8005"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  # Automation Service (8006)
+  automation-service:
+    build:
+      context: .
+      dockerfile: automation-service/Dockerfile
+    container_name: automation-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      REDIS_URL: redis://:redis_password@redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: "*"
+    ports:
+      - "8006:8006"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  # Notification Service (8007)
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: notification-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      REDIS_URL: redis://:redis_password@redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: "*"
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+    ports:
+      - "8007:8007"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  # Analytics Service (8008)
+  analytics-service:
+    build:
+      context: .
+      dockerfile: analytics-service/Dockerfile
+    container_name: analytics-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      REDIS_URL: redis://:redis_password@redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: "*"
+    ports:
+      - "8008:8008"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  # WhatsApp Service (8009)
+  whatsapp-service:
+    build:
+      context: .
+      dockerfile: whatsapp-service/Dockerfile
+    container_name: whatsapp-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      REDIS_URL: redis://:redis_password@redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: "*"
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      WHATSAPP_NUMBER: ${WHATSAPP_NUMBER:-}
+    ports:
+      - "8009:8009"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+  # MCP Service (8010)
+  mcp-service:
+    build:
+      context: .
+      dockerfile: mcp-service/Dockerfile
+    container_name: mcp-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/autopro
+      REDIS_URL: redis://:redis_password@redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: "*"
+      LINEAR_API_KEY: ${LINEAR_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_KEY: ${SUPABASE_KEY:-}
+    ports:
+      - "8010:8010"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - autopro-network
+    restart: unless-stopped
+
+# ==================== VOLUMES ====================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  kong_data:
+    driver: local
+  video_cache:
+    driver: local
+
+# ==================== NETWORKS ====================
+networks:
+  autopro-network:
+    driver: bridge
