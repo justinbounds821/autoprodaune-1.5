@@ -1,7 +1,7 @@
 """
-FAZA 3 — GROWTH (minimul necesar ca să nu crape UI)
-
-Ținem SRP: nu implementăm business complex aici; doar endpointuri "sănătoase" (200 JSO
+FAZA 3 - GROWTH (minimul necesar ca sa nu crape UI)
+Tinem SRP: nu implementam business complex aici; doar endpointuri sanatoase (200 JSON)
+"""
 
 from fastapi import APIRouter
 from typing import Dict, Any
@@ -178,7 +178,7 @@ async def funnel_metrics() -> Dict[str, Any]:
 
 @router.get("/master-growth-activation/system-status")
 async def master_growth_status() -> Dict[str, Any]:
-    """Master growth system status - stable contract"""
+    """Master growth system status"""
     return {
         "status": "ok",
         "modules_active": ["growth-engine", "intelligent-conversion"],
@@ -187,9 +187,10 @@ async def master_growth_status() -> Dict[str, Any]:
 
 @router.post("/master-growth-activation/activate-full-system")
 async def activate_full_system() -> Dict[str, Any]:
-    """Activate full growth system - stable contract"""
+    """Activate full growth system"""
     return {
         "activated": True,
         "modules_started": ["growth-engine", "intelligent-conversion", "customer-nurturing"],
         "estimated_impact": "medium"
     }
+
