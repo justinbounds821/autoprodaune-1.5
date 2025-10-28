@@ -10,7 +10,8 @@ import subprocess
 import asyncio
 import glob
 import logging
-from typing import Optional
+import json
+from typing import Optional, List, Dict
 import httpx
 
 from .job_store import create_job, set_status
@@ -239,6 +240,100 @@ async def _run_wav2lip(image_path: Optional[str], video_path: Optional[str],
         logger.error(f"Wav2Lip failed: {e.stderr}")
         raise Exception(f"Wav2Lip generation failed: {e.stderr}")
 
+def _phase9_enhance(
+    job_id: str,
+    script: str,
+    final_wav: str,
+    video_layers: List[Dict],
+    out_dir: str,
+) -> Dict:
+    """
+    Phase 9 enhancements: auto-captions (Whisper) + B-roll injection.
+    
+    Args:
+        job_id: Job identifier
+        script: Video script text
+        final_wav: Path to final audio file
+        video_layers: List of video layers (can be extended with B-roll)
+        out_dir: Output directory for artifacts
+        
+    Returns:
+        Dict with keys: captions, broll_layers
+    """
+    result = {"captions": None, "broll_layers": []}
+    
+    # 1. Auto-captions with Whisper
+    if os.getenv("AI_ENABLE_WHISPER", "false").lower() == "true":
+        try:
+            from .whisper_captions import WhisperCaptions
+            
+            wc = WhisperCaptions()
+            captions_dir = os.path.join(out_dir, "captions")
+            cap = wc.generate(final_wav, out_dir=captions_dir)
+            
+            if cap:
+                result["captions"] = cap
+                logger.info(f"Generated Whisper captions for job {job_id}")
+                
+                # Persist to database (best effort)
+                try:
+                    from .job_repo_supabase import get_supabase_service_instance
+                    
+                    svc = get_supabase_service_instance()
+                    # Store caption metadata
+                    # Note: This assumes video_captions table exists
+                    # Create with: CREATE TABLE IF NOT EXISTS video_captions (
+                    #   job_id uuid PRIMARY KEY,
+                    #   lang text,
+                    #   srt_url text,
+                    #   ass_url text,
+                    #   created_at timestamptz DEFAULT now()
+                    # );
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to persist captions: {e}")
+                    
+        except Exception as e:
+            logger.warning(f"Whisper captions failed: {e}")
+    
+    # 2. B-roll injection
+    if os.getenv("AI_ENABLE_BROLL", "false").lower() == "true":
+        try:
+            from .broll_injector import BRollInjector
+            from .tagging_service import TaggingService
+            from .scene_detect import SceneDetectService
+            
+            # Extract tags from script
+            tagger = TaggingService()
+            tags = tagger.extract_tags(script)
+            
+            # Detect scene cuts (stub: use single scene at 0.0)
+            scene_cuts = [0.0]
+            
+            # Load B-roll rules
+            rules_path = os.getenv(
+                "BROLL_RULES_JSON",
+                "services/api/app/templates/broll_rules.json"
+            )
+            
+            if os.path.exists(rules_path):
+                with open(rules_path, "r", encoding="utf-8") as f:
+                    spec = json.load(f)
+                
+                br = BRollInjector.from_json(spec)
+                layers = br.plan_layers(tags, scene_cuts)
+                result["broll_layers"] = layers
+                video_layers.extend(layers)
+                
+                logger.info(f"Added {len(layers)} B-roll layers for job {job_id}")
+            else:
+                logger.debug(f"B-roll rules file not found: {rules_path}")
+                
+        except Exception as e:
+            logger.warning(f"B-roll injection failed: {e}")
+    
+    return result
+
 async def enqueue_lipsync(script: str, voice_id: Optional[str], 
                          avatar_image_url: Optional[str], 
                          avatar_video_url: Optional[str]) -> str:
@@ -298,6 +393,12 @@ async def enqueue_lipsync(script: str, voice_id: Optional[str],
                 await _run_sadtalker(img_path, vid_path, wav_path, out_path)
             else:
                 await _run_wav2lip(img_path, vid_path, wav_path, out_path)
+            
+            # 3.5. Phase 9 enhancements (captions + B-roll)
+            video_layers = []  # Placeholder for multi-track composition
+            work_dir = os.path.dirname(out_path)
+            enh = _phase9_enhance(job_id, script, wav_path, video_layers, work_dir)
+            logger.info(f"Phase 9 enhancements: {enh}")
             
             # 4. Mark as completed
             video_url = f"/api/video/video/heygen/download/{job_id}"
