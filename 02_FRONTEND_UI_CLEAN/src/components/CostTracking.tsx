@@ -1,48 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 import { 
   DollarSign, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  TrendingUp, 
-  TrendingDown,
+  TrendingUp,
   PieChart,
   BarChart3
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-interface CostEntry {
-  id: string;
-  amount: number;
-  category: string;
-  description: string;
-  date: string;
-  recurring: boolean;
-  tags: string[];
-}
+import { getFinancialBreakdown } from '@/lib/api';
+import type { CostEntry } from '@/types/api';
 
 interface CategorySummary {
   category: string;
@@ -51,17 +20,6 @@ interface CategorySummary {
   percentage: number;
   color: string;
 }
-
-const COST_CATEGORIES = [
-  'Marketing',
-  'Development',
-  'Infrastructure',
-  'Personnel',
-  'Software',
-  'Hardware',
-  'Travel',
-  'Other'
-];
 
 const COLORS = [
   'bg-red-500',
@@ -78,19 +36,7 @@ export default function CostTracking() {
   const { toast } = useToast();
   const [costs, setCosts] = useState<CostEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [editingCost, setEditingCost] = useState<CostEntry | null>(null);
   const [categorySummary, setCategorySummary] = useState<CategorySummary[]>([]);
-
-  // Form state
-  const [formData, setFormData] = useState({
-    amount: '',
-    category: '',
-    description: '',
-    date: new Date().toISOString().split('T')[0],
-    recurring: false,
-    tags: ''
-  });
 
   useEffect(() => {
     loadCosts();
@@ -103,37 +49,29 @@ export default function CostTracking() {
   const loadCosts = async () => {
     try {
       setLoading(true);
-      // Simulated data - în producție ar fi API call
-      const mockCosts: CostEntry[] = [
-        {
-          id: '1',
-          amount: 1500,
-          category: 'Marketing',
-          description: 'Google Ads campaign',
-          date: '2025-01-01',
-          recurring: false,
-          tags: ['ads', 'google']
-        },
-        {
-          id: '2',
-          amount: 800,
-          category: 'Software',
-          description: 'Supabase Pro subscription',
-          date: '2025-01-01',
-          recurring: true,
-          tags: ['subscription', 'database']
-        },
-        {
-          id: '3',
-          amount: 200,
-          category: 'Development',
-          description: 'API keys and services',
-          date: '2025-01-02',
-          recurring: false,
-          tags: ['api', 'external']
-        }
-      ];
-      setCosts(mockCosts);
+      const response = await getFinancialBreakdown('30d');
+      
+      // Map backend costs to CostEntry format
+      const costEntries: CostEntry[] = response.costs?.top?.map((cost: {
+        id: string;
+        provider: string;
+        operation: string;
+        timestamp: string;
+        cost: number;
+      }) => ({
+        id: cost.id,
+        amount: cost.cost,
+        category: cost.provider || 'Other',
+        description: cost.operation,
+        date: cost.timestamp,
+        recurring: false,
+        tags: [cost.provider, cost.operation],
+        provider: cost.provider,
+        operation: cost.operation,
+        timestamp: cost.timestamp
+      })) || [];
+
+      setCosts(costEntries);
     } catch (error) {
       console.error('Failed to load costs:', error);
       toast({
@@ -148,88 +86,25 @@ export default function CostTracking() {
 
   const calculateCategorySummary = () => {
     const total = costs.reduce((sum, cost) => sum + cost.amount, 0);
-    const summary = COST_CATEGORIES.map((category, index) => {
-      const categoryCosts = costs.filter(cost => cost.category === category);
-      const categoryTotal = categoryCosts.reduce((sum, cost) => sum + cost.amount, 0);
-      
-      return {
-        category,
-        total: categoryTotal,
-        count: categoryCosts.length,
-        percentage: total > 0 ? (categoryTotal / total) * 100 : 0,
-        color: COLORS[index]
-      };
-    }).filter(item => item.total > 0);
+    const categoryMap = new Map<string, { total: number; count: number }>();
+
+    costs.forEach(cost => {
+      const existing = categoryMap.get(cost.category) || { total: 0, count: 0 };
+      categoryMap.set(cost.category, {
+        total: existing.total + cost.amount,
+        count: existing.count + 1
+      });
+    });
+
+    const summary = Array.from(categoryMap.entries()).map(([category, data], index) => ({
+      category,
+      total: data.total,
+      count: data.count,
+      percentage: total > 0 ? (data.total / total) * 100 : 0,
+      color: COLORS[index % COLORS.length]
+    })).sort((a, b) => b.total - a.total);
 
     setCategorySummary(summary);
-  };
-
-  const handleAddCost = async () => {
-    try {
-      const newCost: CostEntry = {
-        id: Date.now().toString(),
-        amount: parseFloat(formData.amount),
-        category: formData.category,
-        description: formData.description,
-        date: formData.date,
-        recurring: formData.recurring,
-        tags: formData.tags.split(',').map(tag => tag.trim()).filter(Boolean)
-      };
-
-      setCosts(prev => [...prev, newCost]);
-      
-      toast({
-        title: "Cost adăugat",
-        description: `Cost de ${formData.amount} LEI adăugat cu succes.`,
-      });
-
-      setFormData({
-        amount: '',
-        category: '',
-        description: '',
-        date: new Date().toISOString().split('T')[0],
-        recurring: false,
-        tags: ''
-      });
-      setIsAddDialogOpen(false);
-
-    } catch (error) {
-      toast({
-        title: "Eroare",
-        description: "Nu s-a putut adăuga costul.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleEditCost = async (cost: CostEntry) => {
-    // Implementation for edit
-    setEditingCost(cost);
-    setFormData({
-      amount: cost.amount.toString(),
-      category: cost.category,
-      description: cost.description,
-      date: cost.date,
-      recurring: cost.recurring,
-      tags: cost.tags.join(', ')
-    });
-    setIsAddDialogOpen(true);
-  };
-
-  const handleDeleteCost = async (id: string) => {
-    try {
-      setCosts(prev => prev.filter(cost => cost.id !== id));
-      toast({
-        title: "Cost șters",
-        description: "Costul a fost șters cu succes.",
-      });
-    } catch (error) {
-      toast({
-        title: "Eroare",
-        description: "Nu s-a putut șterge costul.",
-        variant: "destructive",
-      });
-    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -338,123 +213,37 @@ export default function CostTracking() {
           <CardTitle>Breakdown pe Categorii</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {categorySummary.map((item, index) => (
-              <div key={item.category} className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className={`w-4 h-4 rounded-full ${item.color}`} />
-                  <div>
-                    <p className="font-medium">{item.category}</p>
-                    <p className="text-sm text-gray-500">{item.count} costuri</p>
+          {categorySummary.length > 0 ? (
+            <div className="space-y-3">
+              {categorySummary.map((item) => (
+                <div key={item.category} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-4 h-4 rounded-full ${item.color}`} />
+                    <div>
+                      <p className="font-medium">{item.category}</p>
+                      <p className="text-sm text-gray-500">{item.count} costuri</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold">{formatCurrency(item.total)}</p>
+                    <p className="text-sm text-gray-500">{item.percentage.toFixed(1)}%</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold">{formatCurrency(item.total)}</p>
-                  <p className="text-sm text-gray-500">{item.percentage.toFixed(1)}%</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <DollarSign className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+              <p>Nu există breakdown disponibil.</p>
+            </div>
+          )}
         </CardContent>
       </Card>
-
-      {/* Add Cost Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogTrigger asChild>
-          <Button className="w-full">
-            <Plus className="w-4 h-4 mr-2" />
-            Adaugă Cost Nou
-          </Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingCost ? 'Editează Cost' : 'Adaugă Cost Nou'}
-            </DialogTitle>
-            <DialogDescription>
-              Adaugă un nou cost în sistemul de tracking.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Sumă (LEI)</label>
-              <Input
-                type="number"
-                value={formData.amount}
-                onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                placeholder="0.00"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Categorie</label>
-              <Select
-                value={formData.category}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selectează categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  {COST_CATEGORIES.map(category => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Descriere</label>
-              <Textarea
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Descriere cost..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Data</label>
-              <Input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Tags (separate prin virgulă)</label>
-              <Input
-                value={formData.tags}
-                onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
-                placeholder="ads, marketing, subscription"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsAddDialogOpen(false)}
-            >
-              Anulează
-            </Button>
-            <Button
-              onClick={handleAddCost}
-              disabled={!formData.amount || !formData.category}
-            >
-              {editingCost ? 'Actualizează' : 'Adaugă'} Cost
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Recent Costs List */}
       <Card>
         <CardHeader>
-          <CardTitle>Costuri Recente</CardTitle>
+          <CardTitle>Costuri Recente (Read-Only)</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -477,7 +266,7 @@ export default function CostTracking() {
                     </div>
                     <p className="font-medium">{cost.description}</p>
                     <p className="text-sm text-gray-500">{formatDate(cost.date)}</p>
-                    {cost.tags.length > 0 && (
+                    {cost.tags && cost.tags.length > 0 && (
                       <div className="flex gap-1 mt-1">
                         {cost.tags.map(tag => (
                           <Badge key={tag} variant="outline" className="text-xs">
@@ -491,22 +280,6 @@ export default function CostTracking() {
                     <p className="text-lg font-bold text-red-600">
                       {formatCurrency(cost.amount)}
                     </p>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditCost(cost)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteCost(cost.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
                   </div>
                 </div>
               ))}
