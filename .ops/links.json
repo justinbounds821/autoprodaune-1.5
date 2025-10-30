@@ -1,0 +1,54 @@
+{
+  "repository": {
+    "github": "https://github.com/justinbounds821/autoprodaune-1.5",
+    "actions": "https://github.com/justinbounds821/autoprodaune-1.5/actions",
+    "packages": "https://github.com/justinbounds821?tab=packages&repo_name=autoprodaune-1.5"
+  },
+  "pull_requests": {
+    "pr_36_refactor": "https://github.com/justinbounds821/autoprodaune-1.5/pull/36",
+    "pr_36_checks": "https://github.com/justinbounds821/autoprodaune-1.5/pull/36/checks",
+    "pr_36_files": "https://github.com/justinbounds821/autoprodaune-1.5/pull/36/files"
+  },
+  "ci_cd": {
+    "workflows": "https://github.com/justinbounds821/autoprodaune-1.5/actions/workflows",
+    "ci_cd_yml": "https://github.com/justinbounds821/autoprodaune-1.5/actions/workflows/ci-cd.yml",
+    "smoke_tests_yml": "https://github.com/justinbounds821/autoprodaune-1.5/actions/workflows/smoke-tests.yml",
+    "branch_runs": "https://github.com/justinbounds821/autoprodaune-1.5/actions?query=branch%3Acursor%2Fgather-project-architecture-details-for-refactoring-a309"
+  },
+  "containers": {
+    "ghcr_registry": "https://github.com/justinbounds821/autoprodaune-1.5/pkgs/container/autoprodaune-1.5",
+    "lead_service": "ghcr.io/justinbounds821/autoprodaune-1.5-lead-service",
+    "mcp_service": "ghcr.io/justinbounds821/autoprodaune-1.5-mcp-service"
+  },
+  "deployments": {
+    "vercel_project": "https://vercel.com/justinbounds821/autoprodaune-1-5",
+    "vercel_deployments": "https://vercel.com/justinbounds821/autoprodaune-1-5/deployments"
+  },
+  "monitoring": {
+    "prometheus_local": "http://localhost:9090",
+    "grafana_local": "http://localhost:3000",
+    "services_health": {
+      "lead": "http://localhost:8001/health",
+      "video": "http://localhost:8002/health",
+      "social": "http://localhost:8003/health",
+      "financial": "http://localhost:8004/health",
+      "referral": "http://localhost:8005/health",
+      "automation": "http://localhost:8006/health",
+      "notification": "http://localhost:8007/health",
+      "analytics": "http://localhost:8008/health",
+      "whatsapp": "http://localhost:8009/health",
+      "mcp": "http://localhost:8010/health"
+    }
+  },
+  "integrations": {
+    "linear_workspace": "https://linear.app/autoprodaune",
+    "discord_webhook": "https://discord.com/api/webhooks/...",
+    "supabase_project": "https://yfbhmbjtauhxgalvdfns.supabase.co"
+  },
+  "documentation": {
+    "readme": "https://github.com/justinbounds821/autoprodaune-1.5/blob/main/README.md",
+    "architecture": "https://github.com/justinbounds821/autoprodaune-1.5/blob/cursor/gather-project-architecture-details-for-refactoring-a309/autopro_refactor_full_connected/ARCHITECTURE.md",
+    "mcp_setup": "https://github.com/justinbounds821/autoprodaune-1.5/blob/main/MCP_CHATGPT_SETUP_GUIDE.md"
+  }
+}
+

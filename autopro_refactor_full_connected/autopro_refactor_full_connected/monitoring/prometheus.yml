@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'autopro-daune'
+    environment: 'production'
+
+scrape_configs:
+  - job_name: 'autopro-microservices'
+    static_configs:
+      - targets: ['lead-service:8001', 'video-service:8002', 'social-service:8003', 'financial-service:8004', 'referral-service:8005', 'automation-service:8006', 'notification-service:8007', 'analytics-service:8008', 'whatsapp-service:8009', 'mcp-service:8010']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
